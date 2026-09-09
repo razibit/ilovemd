@@ -4,6 +4,7 @@ import type {
   Annotation,
   AnnotationSet,
 } from "../../../packages/engine/src/annotations";
+import { validateAnnotations } from "../../../packages/engine/src/annotations";
 import { readAnnotations, saveAnnotations } from "./storage";
 import { download } from "./assets";
 
@@ -166,6 +167,10 @@ export function useAnnotations(
     const css = getComputedStyle(el),
       rect = el.getBoundingClientRect(),
       factor = rect.width / el.offsetWidth;
+    if (!Number.isFinite(factor) || factor <= 0 || !el.offsetWidth || !el.offsetHeight) {
+      setError("The page is still resizing. Wait a moment, then start annotations again.");
+      return;
+    }
     const blocks = [
       ...el.querySelectorAll<HTMLElement>("[data-source-start]"),
     ].map((block) => {
@@ -201,10 +206,18 @@ export function useAnnotations(
           css.paddingBottom,
           css.paddingLeft,
         ].map(parseFloat),
-        theme: el.dataset.theme as "light" | "dark",
+        theme: el.dataset.theme === "dark" ? "dark" : "light",
       },
       objects: structuredClone(objects),
     };
+    try {
+      // Do this before enabling the layer so a bad transient measurement never
+      // becomes an unsaved set that fails after the user has drawn on it.
+      validateAnnotations(value, original);
+    } catch {
+      setError("The page layout is still changing. Wait for it to settle, then start annotations again.");
+      return;
+    }
     setSet(value);
     setPast([]);
     setFuture([]);

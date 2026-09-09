@@ -16,7 +16,21 @@ const dbPromise = openDB("folio", 3, {
 void dbPromise.catch(() => {});
 export async function readAnnotations(documentId: string): Promise<AnnotationSet[]> {
   const sets = await (await dbPromise).getAll('annotations') as AnnotationSet[];
-  return Promise.all(sets.filter(s => s.documentId === documentId).map(async s => { const value = { ...s, snapshot: (await hydrate({ snapshot: s.snapshot } as Saved)).snapshot }; validateAnnotations(value, value.snapshot); return value; }));
+  const restored = await Promise.all(
+    sets.filter(s => s.documentId === documentId).map(async s => {
+      try {
+        const value = { ...s, snapshot: (await hydrate({ snapshot: s.snapshot } as Saved)).snapshot };
+        validateAnnotations(value, value.snapshot);
+        return value;
+      } catch (error) {
+        // A legacy or damaged record must not make every other note set for
+        // this document unavailable. It remains in IndexedDB for recovery.
+        console.warn("Ignoring invalid stored annotation set", error);
+        return null;
+      }
+    }),
+  );
+  return restored.filter((value): value is AnnotationSet => value !== null);
 }
 export async function saveAnnotations(set: AnnotationSet, expected?: string) {
   validateAnnotations(set, set.snapshot);

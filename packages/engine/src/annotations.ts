@@ -121,7 +121,7 @@ export function validateAnnotations(
   if (
     !l ||
     (l.mediaWidth !== undefined &&
-      (!finite(l.mediaWidth) || l.mediaWidth < 200 || l.mediaWidth > 20000)) ||
+      (!finite(l.mediaWidth) || l.mediaWidth < 1 || l.mediaWidth > 20000)) ||
     ![l.width, l.height, l.fontSize, l.lineHeight].every(finite) ||
     l.width < 100 ||
     l.width > 10000 ||

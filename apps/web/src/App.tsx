@@ -125,6 +125,25 @@ const prefDefaults: Preferences = {
   sync: true,
   outline: innerWidth >= 900,
 };
+function restorePreferences(value: unknown): Preferences {
+  const saved = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const number = (key: keyof Pick<Preferences, "fontSize" | "lineHeight" | "width" | "zoom">, min: number, max: number) => {
+    const candidate = saved[key];
+    return typeof candidate === "number" && Number.isFinite(candidate)
+      ? Math.max(min, Math.min(max, candidate))
+      : prefDefaults[key];
+  };
+  return {
+    theme: ["system", "light", "dark"].includes(saved.theme as string) ? saved.theme as Preferences["theme"] : prefDefaults.theme,
+    documentTheme: ["light", "dark"].includes(saved.documentTheme as string) ? saved.documentTheme as Preferences["documentTheme"] : prefDefaults.documentTheme,
+    fontSize: number("fontSize", 12, 24),
+    lineHeight: number("lineHeight", 1.3, 2.4),
+    width: number("width", 480, 1100),
+    zoom: number("zoom", 25, 400),
+    sync: typeof saved.sync === "boolean" ? saved.sync : prefDefaults.sync,
+    outline: typeof saved.outline === "boolean" ? saved.outline : prefDefaults.outline,
+  };
+}
 function GitHubStarLink() {
   const [stars, setStars] = useState<number | null>(null);
   useEffect(() => {
@@ -315,7 +334,7 @@ export function App() {
           setDoc(saved.snapshot);
           version.current = saved.version;
         }
-        if (p) setPrefs({ ...prefDefaults, ...p });
+        if (p) setPrefs(restorePreferences(p));
         setSaveStatus(saved ? "Saved on this device" : "Ready to write");
       } catch (e) {
         setNotice(
