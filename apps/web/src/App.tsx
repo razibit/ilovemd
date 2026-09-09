@@ -84,6 +84,7 @@ import { usePreviewNavigation } from './usePreviewNavigation';
 import { InstallBanner } from "./InstallBanner";
 import { TemplateIcon, AnnotateIcon } from "./WorkspaceIcons";
 import { PortfolioLink } from "./PortfolioLink";
+import { CreatorAttribution } from "./CreatorAttribution";
 import { errorCode, track } from "./analytics";
 import { PreviewControls } from './PreviewControls';
 import { ZoomPopover } from './ZoomPopover';
@@ -1000,6 +1001,7 @@ export function App() {
                 <BookOpen size={16} />
                 Syntax & support <ArrowUpRight size={13} />
               </button>
+              <CreatorAttribution />
               <div className="sidebar-footer">
                 <span>iLoveMd · v0.1</span>
                 {import.meta.env.VITE_PORTFOLIO_URL &&

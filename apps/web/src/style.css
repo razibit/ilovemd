@@ -380,6 +380,76 @@ kbd {
   height: 23px;
   width: 23px;
 }
+/* ── Creator attribution card ───────────────────────────────── */
+.creator-attribution {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  max-width: calc(100% - 8px);
+  margin: 6px 4px 0;
+  padding: 2px 4px 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--muted);
+}
+.creator-attribution + .sidebar-footer {
+  margin-top: 8px;
+}
+.creator-attribution-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  color: var(--muted);
+  border-radius: 4px;
+  line-height: 1;
+}
+.creator-attribution-link:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.creator-attribution-link:hover {
+  color: var(--ink);
+}
+.creator-attribution-text {
+  white-space: nowrap;
+  line-height: 1;
+}
+.creator-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  display: block;
+}
+.creator-attribution-dismiss {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  outline-offset: 1px;
+}
+.creator-attribution-dismiss:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.creator-attribution-dismiss:focus-visible {
+  outline: 1.5px solid var(--accent);
+}
 .main-workspace {
   min-width: 0;
   display: flex;
