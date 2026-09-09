@@ -112,7 +112,9 @@ button:hover {
   color: var(--accent);
 }
 .brand-dot {
-  margin-left: -9px;
+  color: var(--muted);
+  font-size: .62em;
+  letter-spacing: -.4px;
 }
 .brand-mark {
   height: 35px;
@@ -121,7 +123,11 @@ button:hover {
   place-items: center;
   border: 1px solid var(--accent);
   border-radius: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -1px;
 }
+.crawlable-intro { max-width:760px; margin:10vh auto; padding:24px; font:18px/1.6 system-ui,sans-serif; }
 .header-divider {
   height: 24px;
   width: 1px;

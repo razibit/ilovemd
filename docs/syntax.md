@@ -4,7 +4,7 @@ Baseline: CommonMark 0.31.2 with GFM tables, task lists, strikethrough, autolink
 
 ### Escaped newlines in imported tables
 
-Some table generators serialize a cell line break as literal `\n`. Folio renders a single unescaped sequence in table prose as a hard line break, while preserving the underlying source. Inline code and doubled backslashes remain literal. Ordinary LF/CRLF follows Markdown soft/hard-break rules.
+Some table generators serialize a cell line break as literal `\n`. iLoveMd renders a single unescaped sequence in table prose as a hard line break, while preserving the underlying source. Inline code and doubled backslashes remain literal. Ordinary LF/CRLF follows Markdown soft/hard-break rules.
 
 ## Mathematics
 
@@ -59,6 +59,6 @@ Mermaid fences support flowcharts, sequence, class, state, ER, journey, Gantt, p
 | PNG selected block | Click a rendered block, choose selected block capture. Selection is a whole source-mapped block, not a freehand crop.                                     |
 | HTML               | Self-contained styles, embedded fonts/assets, static sanitized diagrams. No JavaScript runtime or interactive video.                                      |
 | Markdown           | Exact current source string encoded as UTF-8.                                                                                                             |
-| Folio ZIP          | Exact source, settings, asset manifest and images. Requires bundle-aware import; not a universally portable ZIP layout.                                   |
+| iLoveMd bundle (`.folio.zip`) | Exact source, settings, asset manifest and images. The legacy extension is retained for compatibility; this is not a universally portable ZIP layout. |
 
 PNG/JPEG/WebP/GIF uploads are decoded and size checked. SVG uploads are parsed and sanitized: scripts, event handlers, foreign objects, styles, external references and CSS URLs are removed. GIFs become a static frame in static exports; animated standalone HTML images may remain animated. HEIC, audio, arbitrary iframes, whole-document SVG, DOCX, EPUB and PDF import are unsupported in this release. JPEG/WebP output, richer offline support and additional adapters are planned.

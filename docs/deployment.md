@@ -4,7 +4,7 @@
 
 `npm ci`, `npx playwright install chromium`, `npm run build`, then `npm start`. The service binds to loopback by default and serves both the built application and API. `npm run dev` starts Vite on 5173 and the export service on 4174. Do not run a second service on the same port.
 
-Ports can be changed through `PORT`; update Vite's proxy and `FOLIO_ORIGINS` if using non-default development ports. The service reads process environment variables, not `.env` files automatically. Vite reads its standard `.env.local` file within `apps/web` for `VITE_PORTFOLIO_URL`.
+Ports can be changed through `PORT`; update Vite's proxy and `FOLIO_ORIGINS` if using non-default development ports. The service reads process environment variables, not `.env` files automatically. Vite reads its standard `.env.local` file within `apps/web` for `VITE_PORTFOLIO_URL` and `VITE_ANALYTICS_MODE`. See [analytics, privacy and reporting](analytics-seo.md) before enabling collection.
 
 ## Container packaging
 
@@ -35,6 +35,6 @@ The current implementation uses fresh browser contexts in a shared Chromium proc
 
 ## Monitoring
 
-`GET /api/health` reports process health and active exports. Protect it with the same configured API token. Monitor process memory, 4xx/5xx rates, render duration, restarts and queue rejection counts at the gateway without logging request bodies. There is no analytics SDK and no document telemetry.
+`GET /api/health` reports process health and active exports. Protect it with the same configured API token. Monitor process memory, 4xx/5xx rates, render duration, restarts and queue rejection counts at the gateway without logging request bodies. The frontend has an allowlisted GTM data-layer integration. Analytics is disabled by default and never receives document content.
 
 Backups are user-created Markdown bundles. IndexedDB is not a substitute for durable backup or cloud synchronization. Asset garbage collection and encrypted local storage are future work.

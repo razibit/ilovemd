@@ -10,4 +10,6 @@ import "katex/dist/katex.min.css";
 import "@folio/themes/document.css";
 import "./style.css";
 import { App } from "./App";
+import { trackInitialPageView } from "./analytics";
+trackInitialPageView();
 createRoot(document.getElementById("root")!).render(<App />);

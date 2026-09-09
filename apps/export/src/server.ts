@@ -10,7 +10,7 @@ import {
   type ExportOptions,
 } from "@folio/engine";
 const app = Fastify({ logger: false, bodyLimit: 75 * 1024 * 1024 });
-app.addHook('onSend',async(_req,reply,payload)=>{reply.header('X-Content-Type-Options','nosniff').header('Referrer-Policy','no-referrer').header('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https: http:; worker-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");return payload});
+app.addHook('onSend',async(_req,reply,payload)=>{reply.header('X-Content-Type-Options','nosniff').header('Referrer-Policy','strict-origin-when-cross-origin').header('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.google-analytics.com https://*.google-analytics.com; font-src 'self' data:; connect-src 'self' https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com; worker-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");return payload});
 const port = Number(process.env.PORT || 4174);
 const host = process.env.HOST || "127.0.0.1";
 if (
@@ -217,10 +217,10 @@ await app.register(fastifyStatic, {
 app.setNotFoundHandler((req, reply) =>
   req.url.startsWith("/api/")
     ? reply.code(404).send({ error: "Not found" })
-    : reply.sendFile("index.html"),
+    : reply.code(404).sendFile("404.html"),
 );
 await app.listen({ port, host });
-console.log(`Folio export service: http://${host}:${port}`);
+console.log(`iLoveMd export service: http://${host}:${port}`);
 for (const event of ["SIGINT", "SIGTERM"] as const)
   process.on(event, async () => {
     clearInterval(cleanup);

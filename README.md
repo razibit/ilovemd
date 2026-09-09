@@ -1,6 +1,6 @@
-# Folio
+# iLoveMd
 
-A local-first Markdown writing workspace with a shared preview/export renderer. Source is authoritative. The export service produces real PDF, PNG and standalone HTML artifacts; Markdown and asset bundles download in the browser.
+iLoveMd.tech is a Markdown editing, preview, annotation and export workspace with a shared preview/export renderer. Source is authoritative. The export service produces real PDF, PNG and standalone HTML artifacts; Markdown and asset bundles download in the browser.
 
 ## Run locally
 
@@ -25,7 +25,7 @@ For development, run `npm run dev` and open **http://127.0.0.1:5173**. The front
 - Source and images autosave in IndexedDB. Local history retains up to 50 revisions. Conflicting browser tabs preserve recovery copies and show an alert. Browser storage can be cleared or evicted; download bundles for durable backups.
 - Adjust interface/document themes and reading settings independently. Export theme is separate and defaults to light.
 - Generate a PDF preview, inspect actual pages, then download the same bytes. Missing content blocks normal export; explicitly acknowledged warning exports contain diagnostics.
-- Ctrl/Cmd+S downloads unchanged Markdown. A Folio ZIP preserves source, settings and referenced local image data and can be re-imported.
+- Ctrl/Cmd+S downloads unchanged Markdown. The legacy-compatible `.folio.zip` bundle preserves source, settings and referenced local image data and can be re-imported without breaking existing backups.
 
 ## Project structure
 
@@ -57,4 +57,4 @@ For interactive debugging: `npx playwright test --debug`. For a headed run witho
 
 This is a working implementation, not a certified production release. See [validation](docs/validation.md), [support matrix](docs/support-matrix.json), [syntax](docs/syntax.md), [architecture](docs/architecture.md), and [deployment](docs/deployment.md) for evidence and boundaries. PDF tagging is enabled but PDF/UA conformance and comprehensive assistive-technology coverage are not claimed.
 
-The portfolio URL is optional: set `VITE_PORTFOLIO_URL` in `apps/web/.env.local` before building. No placeholder link is shown when unset, and exported documents contain no portfolio link or watermark.
+The portfolio URL is optional: set `VITE_PORTFOLIO_URL` in `apps/web/.env.local` before building. No placeholder link is shown when unset, and exported documents contain no portfolio link or watermark. Analytics deployment and external-account setup are documented in [analytics, privacy and reporting](docs/analytics-seo.md).

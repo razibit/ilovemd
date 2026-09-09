@@ -83,6 +83,8 @@ import { useAnnotations } from './useAnnotations';
 import { usePreviewNavigation } from './usePreviewNavigation';
 import { InstallBanner } from "./InstallBanner";
 import { TemplateIcon, AnnotateIcon } from "./WorkspaceIcons";
+import { PortfolioLink } from "./PortfolioLink";
+import { errorCode, track } from "./analytics";
 import { PreviewControls } from './PreviewControls';
 import { ZoomPopover } from './ZoomPopover';
 import { useToolbarVisibility } from './useToolbarVisibility';
@@ -564,8 +566,10 @@ export function App() {
       const asset = await imageAsset(file, file.name);
       setImageDraft({ asset, alt: "", caption: "", width: 100 });
       setModal("image");
+      track({ event: "content_action", action: "paste_complete", content_type: "image" });
     } catch (e) {
       setNotice(String(e));
+      track({ event: "app_error", feature: "import", error_code: errorCode(e) });
     }
   };
   const importFile = async (file: File) => {
@@ -583,7 +587,7 @@ export function App() {
             !file.name.includes("\\"),
         });
         if (!entries["manifest.json"] || !entries["document.md"])
-          throw new Error("This is not a Folio bundle.");
+          throw new Error("This is not a compatible iLoveMd bundle.");
         const manifest = JSON.parse(strFromU8(entries["manifest.json"]));
         const assets: Record<string, Asset> = {};
         let total = 0;
@@ -618,8 +622,10 @@ export function App() {
       setNotice(
         `Imported ${file.name}. Previous content remains in Local history.`,
       );
+      track({ event: "content_action", action: "import_complete", content_type: file.name.endsWith(".zip") ? "bundle" : "markdown" });
     } catch (e) {
       setNotice(String(e));
+      track({ event: "app_error", feature: "import", error_code: errorCode(e) });
     }
   };
   const bundle = () => {
@@ -674,6 +680,7 @@ export function App() {
   const generateExport = async () => {
     const startedRevision = doc.revision, startedDocument = doc.id;
     setExporting(true);
+    track({ event: "export_started", export_format: exportOptions.format, annotations_included: !!exportOptions.includeAnnotations });
     setExportError("");
     setExportDiagnostics([]);
     setArtifact(null);
@@ -725,6 +732,7 @@ export function App() {
       setArtifact(blob);
       setExportResult(info);
       setExportDiagnostics(info.warnings);
+      track({ event: "export_completed", export_format: exportOptions.format, annotations_included: !!exportOptions.includeAnnotations });
       void fetch(`/api/exports/${info.id}`, {
         method: "DELETE",
         headers: {
@@ -734,6 +742,7 @@ export function App() {
       });
     } catch (e) {
       setExportError(String(e));
+      track({ event: "export_failed", export_format: exportOptions.format, annotations_included: !!exportOptions.includeAnnotations, error_code: errorCode(e) });
     } finally {
       setExporting(false);
     }
@@ -859,13 +868,13 @@ export function App() {
         <a
           className="brand"
           href="#"
-          aria-label="Folio home"
+          aria-label="iLoveMd.tech home"
           onClick={(e) => e.preventDefault()}
         >
           <span className="brand-mark">
-            <BookOpen size={23} strokeWidth={1.6} />
+            <span aria-hidden="true">M↓</span>
           </span>
-          folio<span className="brand-dot">.</span>
+          <span>iLoveMd<span className="brand-dot">.tech</span></span>
         </a>
         <span className="header-divider" />
         <span className="workspace-name">Personal workspace</span>
@@ -912,7 +921,7 @@ export function App() {
               <FileText size={17} />
               <span>
                 {title === "A place for your best thinking."
-                  ? "Welcome to Folio"
+                  ? "Welcome to iLoveMd"
                   : title}
               </span>
               <span className="tiny-dot" />
@@ -966,36 +975,32 @@ export function App() {
                 Syntax & support <ArrowUpRight size={13} />
               </button>
               <div className="sidebar-footer">
-                <span>Folio · v0.1</span>
+                <span>iLoveMd · v0.1</span>
                 {import.meta.env.VITE_PORTFOLIO_URL &&
                   /^https?:\/\//.test(import.meta.env.VITE_PORTFOLIO_URL) && (
-                    <a
-                      href={import.meta.env.VITE_PORTFOLIO_URL}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <PortfolioLink href={import.meta.env.VITE_PORTFOLIO_URL}>
                       Made by <ArrowUpRight size={12} />
-                    </a>
+                    </PortfolioLink>
                   )}
                 <span className="theme-buttons">
                   <IconButton
                     label="Light interface"
                     active={prefs.theme === "light"}
-                    onClick={() => setPrefs((p) => ({ ...p, theme: "light" }))}
+                    onClick={() => { setPrefs((p) => ({ ...p, theme: "light" })); track({ event: "tool_interaction", feature: "interface_theme", action: "light" }); }}
                   >
                     <Sun size={14} />
                   </IconButton>
                   <IconButton
                     label="Dark interface"
                     active={prefs.theme === "dark"}
-                    onClick={() => setPrefs((p) => ({ ...p, theme: "dark" }))}
+                    onClick={() => { setPrefs((p) => ({ ...p, theme: "dark" })); track({ event: "tool_interaction", feature: "interface_theme", action: "dark" }); }}
                   >
                     <Moon size={14} />
                   </IconButton>
                   <IconButton
                     label="System interface theme"
                     active={prefs.theme === "system"}
-                    onClick={() => setPrefs((p) => ({ ...p, theme: "system" }))}
+                    onClick={() => { setPrefs((p) => ({ ...p, theme: "system" })); track({ event: "tool_interaction", feature: "interface_theme", action: "system" }); }}
                   >
                     <Monitor size={14} />
                   </IconButton>
@@ -1022,20 +1027,21 @@ export function App() {
               </span>
               <span className="document-title">
                 {title === "A place for your best thinking."
-                  ? "Welcome to Folio"
+                  ? "Welcome to iLoveMd"
                   : title}
               </span>
               <span className="md-label">.md</span>
             </div>
             <div className="document-actions">
                   <button className="quiet-button document-theme-button"
-                    onClick={() =>
+                    onClick={() => {
+                      track({ event: "tool_interaction", feature: "document_theme", action: prefs.documentTheme === "light" ? "dark" : "light" });
                       setPrefs((p) => ({
                         ...p,
                         documentTheme:
                           p.documentTheme === "light" ? "dark" : "light",
-                      }))
-                    }
+                      }));
+                    }}
                     title="Toggle document theme"
                     aria-label="Toggle document theme"
                   >
@@ -1076,7 +1082,7 @@ export function App() {
               ).map(({ key, label, icon: Icon }) => (
                 <button
                   key={key}
-                  onClick={() => setViewMode(key)}
+                  onClick={() => { setViewMode(key); track({ event: "tool_interaction", feature: "workspace_view", action: key }); }}
                   aria-label={label}
                   title={label}
                   aria-pressed={viewMode === key}
@@ -1093,7 +1099,7 @@ export function App() {
                 role="switch"
                 aria-label="Sync scroll"
                 aria-checked={prefs.sync}
-                onClick={() => setPrefs((p) => ({ ...p, sync: !p.sync }))}
+                onClick={() => { setPrefs((p) => ({ ...p, sync: !p.sync })); track({ event: "tool_interaction", feature: "sync_scroll", action: prefs.sync ? "disabled" : "enabled" }); }}
               >
                 <Link2 size={14} />
                 <span>Sync scroll</span>
@@ -1255,7 +1261,7 @@ export function App() {
               aria-label="Document preview"
               style={{ display: viewMode === "editor" ? "none" : undefined }}
             >
-              <AnnotationToolbar pan={navigation.pan} chooseTool={() => navigation.setHand(false)} visible={notes.enabled && viewMode !== "editor"} close={notes.toggle} selected={!!selectedNote} remove={() => { if (notes.set) notes.change(notes.set.objects.filter(a => a.id !== selectedNote)); setSelectedNote(null); }} settings={drawingSettings} change={next => { const selected=notes.set?.objects.find(a=>a.id===selectedNote); const effective=drawingSettings.tool === 'select' && next.tool === 'select' && selected?.tool === 'highlighter' ? {...next,opacity:Math.min(.45,next.opacity)} : next; setDrawingSettings(effective); if (drawingSettings.tool === 'select' && next.tool === 'select' && notes.set && selectedNote) notes.change(notes.set.objects.map(a => a.id === selectedNote ? {...a,color:effective.color,width:effective.width,opacity:effective.opacity} : a)); }} undo={notes.undo} redo={notes.redo} canUndo={notes.canUndo} canRedo={notes.canRedo} clear={() => { if (confirm('Clear all annotations on this revision? You can undo this action.')) notes.change([]); }}/>
+              <AnnotationToolbar pan={navigation.pan} chooseTool={() => navigation.setHand(false)} visible={notes.enabled && viewMode !== "editor"} close={notes.toggle} selected={!!selectedNote} remove={() => { if (notes.set) notes.change(notes.set.objects.filter(a => a.id !== selectedNote)); setSelectedNote(null); }} settings={drawingSettings} change={next => { if (next.tool !== drawingSettings.tool) track({ event: "tool_interaction", feature: "annotation_tool", action: next.tool }); const selected=notes.set?.objects.find(a=>a.id===selectedNote); const effective=drawingSettings.tool === 'select' && next.tool === 'select' && selected?.tool === 'highlighter' ? {...next,opacity:Math.min(.45,next.opacity)} : next; setDrawingSettings(effective); if (drawingSettings.tool === 'select' && next.tool === 'select' && notes.set && selectedNote) notes.change(notes.set.objects.map(a => a.id === selectedNote ? {...a,color:effective.color,width:effective.width,opacity:effective.opacity} : a)); }} undo={notes.undo} redo={notes.redo} canUndo={notes.canUndo} canRedo={notes.canRedo} clear={() => { if (confirm('Clear all annotations on this revision? You can undo this action.')) notes.change([]); }}/>
               {notes.stale && <div className="annotation-notice" role="status">Notes belong to an earlier layout. <button onClick={() => setPreservedNotes(true)}>Review preserved notes</button><button disabled={!previewSettled || rendering} onClick={() => { if (confirm('Copy these notes onto the current layout for review? Positions may need manual adjustment. The original notes will be preserved.')) void notes.capture(notes.set?.objects); }}>Adopt onto current layout</button></div>}
               {notes.unsavedCount > 0 && <div className="unsaved-notice" role="status">Unsaved notes are retained in this session. <button onClick={notes.backupUnsaved}>Back up all unsaved notes</button></div>}
               {notes.error && <div className="annotation-notice" role="alert">{notes.error}<button onClick={notes.retry}>Retry save</button><button onClick={notes.backup}>Download notes backup</button></div>}
@@ -1821,7 +1827,7 @@ export function App() {
         <Modal title="Syntax & support" onClose={() => setModal("")} wide>
           <div className="modal-content support-content">
             <p>
-              Folio 0.1 is a working local-first workspace. Compatibility is
+              iLoveMd 0.1 is a working local-first workspace. Compatibility is
               bounded by the regression fixtures; it is not a universal LaTeX or
               HTML converter.
             </p>

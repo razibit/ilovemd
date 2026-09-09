@@ -87,5 +87,5 @@ What would we like to understand?
 `,
   "Technical guide":
     "# Technical guide\n\n## Overview\n\n## Getting started\n\n```bash\nnpm install\n```\n\n## Usage\n\n## Troubleshooting\n",
-  "Welcome to Folio": sample,
+  "Welcome to iLoveMd": sample,
 };

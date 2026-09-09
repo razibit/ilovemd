@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /exports/
+
+Sitemap: https://ilovemd.tech/sitemap.xml
