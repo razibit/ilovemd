@@ -41,8 +41,11 @@ export function AnnotationLayer({
   undo: () => void;
   redo: () => void;
 }) {
+  const svgRef = useRef<SVGSVGElement>(null);
   const [draft, setDraft] = useState<Annotation | null>(null);
   const gesture = useRef<{
+    id: number;
+    pointerType: string;
     start: Point;
     original?: Annotation;
     drawing?: Annotation;
@@ -54,6 +57,8 @@ export function AnnotationLayer({
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
   useEffect(() => {
     if (!enabled) {
+      const id = gesture.current?.id;
+      if (id !== undefined && svgRef.current?.hasPointerCapture(id)) svgRef.current.releasePointerCapture(id);
       cancelAnimationFrame(frame.current);
       frame.current = 0;
       pending.current = null;
@@ -61,6 +66,12 @@ export function AnnotationLayer({
       setDraft(null);
     }
   }, [enabled]);
+  useEffect(() => {
+    const id = gesture.current?.id;
+    if (id !== undefined && svgRef.current?.hasPointerCapture(id)) svgRef.current.releasePointerCapture(id);
+    cancelAnimationFrame(frame.current); frame.current = 0;
+    pending.current = null; gesture.current = null; setDraft(null);
+  }, [settings.tool]);
   const point = (
     e: {
       clientX: number;
@@ -115,6 +126,7 @@ export function AnnotationLayer({
   };
   return (
     <svg
+      ref={svgRef}
       className={`annotation-layer ${enabled ? "drawing-enabled" : ""}`}
       aria-label="Document annotations"
       role="group"
@@ -160,10 +172,15 @@ export function AnnotationLayer({
         }
       }}
       onPointerDown={(e) => {
-        if (!enabled || e.button !== 0 || gesture.current) return;
+        if (gesture.current && gesture.current.id !== e.pointerId && gesture.current.pointerType === "touch" && e.pointerType === "touch") {
+          cancelAnimationFrame(frame.current); frame.current = 0;
+          pending.current = null; gesture.current = null; setDraft(null);
+          return;
+        }
+        if (!enabled || e.button !== 0 || gesture.current || (e.pointerType === "touch" && !e.isPrimary)) return;
         e.preventDefault();
         e.stopPropagation();
-        e.currentTarget.focus();
+        e.currentTarget.focus({ preventScroll: true });
         e.currentTarget.setPointerCapture(e.pointerId);
         const p = point(e, e.currentTarget),
           id = (e.target as Element)
@@ -178,6 +195,8 @@ export function AnnotationLayer({
           select(id ?? null);
           if (original)
             gesture.current = {
+              id: e.pointerId,
+              pointerType: e.pointerType,
               start: p,
               original,
               resize: (e.target as Element).hasAttribute("data-resize"),
@@ -197,12 +216,12 @@ export function AnnotationLayer({
               ? Math.min(0.45, settings.opacity)
               : settings.opacity,
         };
-        gesture.current = { start: p, drawing, objects: set.objects };
+        gesture.current = { id: e.pointerId, pointerType: e.pointerType, start: p, drawing, objects: set.objects };
         setDraft(drawing);
       }}
       onPointerMove={(e) => {
         const g = gesture.current;
-        if (!g) return;
+        if (!g || g.id !== e.pointerId) return;
         let p = point(e, e.currentTarget);
         if (g.original) {
           const b = bounds(g.original);
@@ -286,7 +305,7 @@ export function AnnotationLayer({
       }}
       onPointerUp={(e) => {
         const g = gesture.current;
-        if (!g) return;
+        if (!g || g.id !== e.pointerId) return;
         cancelAnimationFrame(frame.current);
         frame.current = 0;
         const a = pending.current ?? g.drawing;
@@ -300,6 +319,10 @@ export function AnnotationLayer({
         pending.current = null;
         setDraft(null);
         e.currentTarget.releasePointerCapture(e.pointerId);
+      }}
+      onLostPointerCapture={() => {
+        cancelAnimationFrame(frame.current); frame.current = 0;
+        gesture.current = null; pending.current = null; setDraft(null);
       }}
       onPointerCancel={() => {
         cancelAnimationFrame(frame.current);

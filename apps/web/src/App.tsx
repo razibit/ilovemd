@@ -13,6 +13,7 @@ import { undo, redo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
 import {
   BookOpen,
+  Hand,
   PanelLeftClose,
   PanelLeftOpen,
   Columns2,
@@ -80,6 +81,8 @@ import { AnnotationLayer } from './AnnotationLayer';
 import { AnnotationToolbar, defaultToolSettings } from './AnnotationToolbar';
 import { useAnnotations } from './useAnnotations';
 import { usePreviewNavigation } from './usePreviewNavigation';
+import { InstallBanner } from "./InstallBanner";
+import { TemplateIcon, AnnotateIcon } from "./WorkspaceIcons";
 import { PreviewControls } from './PreviewControls';
 import { ZoomPopover } from './ZoomPopover';
 import { useToolbarVisibility } from './useToolbarVisibility';
@@ -237,6 +240,7 @@ export function App() {
   const surface = useRef<HTMLDivElement>(null), mainWorkspace = useRef<HTMLElement>(null), suppressNavigation = useRef(0);
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   const [drawingSettings, setDrawingSettings] = useState(defaultToolSettings);
+  const annotatePointer = useRef("");
   const [preservedNotes, setPreservedNotes] = useState(false), [exportPreserved, setExportPreserved] = useState(false);
   const [previewSettled, setPreviewSettled] = useState(false);
   const [renderedSnapshot, setRenderedSnapshot] = useState<DocumentSnapshot | null>(null);
@@ -850,6 +854,7 @@ export function App() {
           e.target.value = "";
         }}
       />
+      <InstallBanner />
       <header className="app-header">
         <a
           className="brand"
@@ -1031,6 +1036,7 @@ export function App() {
                           p.documentTheme === "light" ? "dark" : "light",
                       }))
                     }
+                    title="Toggle document theme"
                     aria-label="Toggle document theme"
                   >
                     {prefs.documentTheme === "light" ? (
@@ -1038,22 +1044,22 @@ export function App() {
                     ) : (
                       <Moon size={13} />
                     )}{" "}
-                    {prefs.documentTheme === "light"
+                    <span className="action-label">{prefs.documentTheme === "light"
                       ? "Light paper"
-                      : "Dark paper"}
+                      : "Dark paper"}</span>
                   </button>
               <button
-                className="quiet-button templates-button"
+                className="quiet-button templates-button" aria-label="Templates" title="Templates"
                 onClick={() => setModal("templates")}
               >
-                Templates <ChevronDown size={14} />
+                <TemplateIcon /><span className="action-label">Templates</span>
               </button>
               <button
-                className="primary-button"
+                className="primary-button" aria-label="Export" title="Export"
                 onClick={() => setModal("export")}
               >
                 <ArrowDownToLine size={16} />
-                Export <ChevronDown size={14} />
+                <span className="action-label">Export</span><ChevronDown className="action-chevron" size={14} />
               </button>
             </div>
             <div
@@ -1249,7 +1255,7 @@ export function App() {
               aria-label="Document preview"
               style={{ display: viewMode === "editor" ? "none" : undefined }}
             >
-              <AnnotationToolbar visible={notes.enabled && viewMode !== "editor"} close={notes.toggle} selected={!!selectedNote} remove={() => { if (notes.set) notes.change(notes.set.objects.filter(a => a.id !== selectedNote)); setSelectedNote(null); }} settings={drawingSettings} change={next => { const selected=notes.set?.objects.find(a=>a.id===selectedNote); const effective=drawingSettings.tool === 'select' && next.tool === 'select' && selected?.tool === 'highlighter' ? {...next,opacity:Math.min(.45,next.opacity)} : next; setDrawingSettings(effective); if (drawingSettings.tool === 'select' && next.tool === 'select' && notes.set && selectedNote) notes.change(notes.set.objects.map(a => a.id === selectedNote ? {...a,color:effective.color,width:effective.width,opacity:effective.opacity} : a)); }} undo={notes.undo} redo={notes.redo} canUndo={notes.canUndo} canRedo={notes.canRedo} clear={() => { if (confirm('Clear all annotations on this revision? You can undo this action.')) notes.change([]); }}/> 
+              <AnnotationToolbar pan={navigation.pan} chooseTool={() => navigation.setHand(false)} visible={notes.enabled && viewMode !== "editor"} close={notes.toggle} selected={!!selectedNote} remove={() => { if (notes.set) notes.change(notes.set.objects.filter(a => a.id !== selectedNote)); setSelectedNote(null); }} settings={drawingSettings} change={next => { const selected=notes.set?.objects.find(a=>a.id===selectedNote); const effective=drawingSettings.tool === 'select' && next.tool === 'select' && selected?.tool === 'highlighter' ? {...next,opacity:Math.min(.45,next.opacity)} : next; setDrawingSettings(effective); if (drawingSettings.tool === 'select' && next.tool === 'select' && notes.set && selectedNote) notes.change(notes.set.objects.map(a => a.id === selectedNote ? {...a,color:effective.color,width:effective.width,opacity:effective.opacity} : a)); }} undo={notes.undo} redo={notes.redo} canUndo={notes.canUndo} canRedo={notes.canRedo} clear={() => { if (confirm('Clear all annotations on this revision? You can undo this action.')) notes.change([]); }}/>
               {notes.stale && <div className="annotation-notice" role="status">Notes belong to an earlier layout. <button onClick={() => setPreservedNotes(true)}>Review preserved notes</button><button disabled={!previewSettled || rendering} onClick={() => { if (confirm('Copy these notes onto the current layout for review? Positions may need manual adjustment. The original notes will be preserved.')) void notes.capture(notes.set?.objects); }}>Adopt onto current layout</button></div>}
               {notes.unsavedCount > 0 && <div className="unsaved-notice" role="status">Unsaved notes are retained in this session. <button onClick={notes.backupUnsaved}>Back up all unsaved notes</button></div>}
               {notes.error && <div className="annotation-notice" role="alert">{notes.error}<button onClick={notes.retry}>Retry save</button><button onClick={notes.backup}>Download notes backup</button></div>}
@@ -1319,6 +1325,15 @@ export function App() {
               {doc.source.length.toLocaleString()} characters<span>·</span>
               {Math.max(1, Math.ceil(words / 220))} min read
             </span>
+            <div className="interaction-controls">
+              <button aria-label="Annotate" title="Annotate" aria-pressed={notes.enabled}
+                disabled={!notes.loaded || !previewSettled || rendering || renderedSnapshot !== doc || notes.stale}
+                onPointerDown={e => { annotatePointer.current = e.pointerType; }}
+                onKeyDown={() => { annotatePointer.current = ""; }}
+                onClick={() => { navigation.setHand(!notes.enabled && annotatePointer.current === "touch"); annotatePointer.current = ""; notes.toggle(); }}><AnnotateIcon /></button>
+              <button aria-label="Pan page" title="Pan page (hold Space to pan temporarily)" aria-pressed={navigation.pan}
+                onClick={() => navigation.setHand(!navigation.hand)}><Hand size={18} aria-hidden="true" /></button>
+            </div>
             <button
               className={
                 diagnostics.length
@@ -1337,7 +1352,7 @@ export function App() {
                 : "No issues"}
             </button>
             <ZoomPopover zoom={prefs.zoom}>
-              <PreviewControls zoom={prefs.zoom} change={(n,reset) => navigation.applyZoom(n,undefined,reset)} fit={navigation.fit} hand={navigation.hand} toggleHand={() => navigation.setHand(!navigation.hand)} drawing={notes.enabled} toggleDrawing={() => { navigation.setHand(false); notes.toggle(); }} busy={!notes.loaded || !previewSettled || rendering || renderedSnapshot !== doc || notes.stale}/>
+              <PreviewControls zoom={prefs.zoom} change={(n,reset) => navigation.applyZoom(n,undefined,reset)} fit={navigation.fit}/>
             </ZoomPopover>
           </footer>
         </main>

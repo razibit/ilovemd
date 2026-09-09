@@ -565,6 +565,7 @@ test.describe("high density annotation geometry", () => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.getByRole("button", { name: "Preview", exact: true }).focus();
     await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await openZoom(page);
     await page.getByRole("button", { name: "Fit width" }).click();
     expect(
       await page

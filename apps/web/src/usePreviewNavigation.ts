@@ -144,7 +144,7 @@ export function usePreviewNavigation(
     },
     panProps: {
       onPointerDownCapture: (e: React.PointerEvent) => {
-        if (!pan || e.button !== 0) return;
+        if (!pan || e.button !== 0 || e.pointerType === "touch" || drag.current) return;
         e.preventDefault();
         e.stopPropagation();
         const p = preview.current!;
@@ -160,18 +160,19 @@ export function usePreviewNavigation(
       onPointerMoveCapture: (e: React.PointerEvent) => {
         const d = drag.current,
           p = preview.current;
-        if (!d || !p) return;
+        if (!d || !p || d.id !== e.pointerId) return;
         e.preventDefault();
         e.stopPropagation();
         p.scrollLeft = d.left - e.clientX + d.x;
         p.scrollTop = d.top - e.clientY + d.y;
       },
       onPointerUpCapture: (e: React.PointerEvent) => {
-        if (!drag.current) return;
+        if (!drag.current || drag.current.id !== e.pointerId) return;
         e.stopPropagation();
         drag.current = null;
         preview.current?.releasePointerCapture(e.pointerId);
       },
+      onLostPointerCapture: () => { drag.current = null; },
       onPointerCancel: () => {
         drag.current = null;
         setSpace(false);

@@ -1,24 +1,14 @@
 import { useEffect, useRef } from "react";
-import { Hand, Pencil } from "lucide-react";
+
 import { ZOOM_LIMITS } from "./usePreviewNavigation";
 export function PreviewControls({
   zoom,
   change,
   fit,
-  hand,
-  toggleHand,
-  drawing,
-  toggleDrawing,
-  busy,
 }: {
   zoom: number;
   change: (n: number, reset?: boolean) => void;
   fit: () => void;
-  hand: boolean;
-  toggleHand: () => void;
-  drawing: boolean;
-  toggleDrawing: () => void;
-  busy: boolean;
 }) {
   const slider = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -37,17 +27,6 @@ export function PreviewControls({
       role="group"
       aria-label="Preview navigation"
     >
-      <button
-        aria-pressed={hand}
-        aria-label="Pan page"
-        onClick={toggleHand}
-        title="Pan page (hold Space to pan temporarily)"
-      >
-        <Hand size={17} />
-      </button>
-      <button aria-label="Annotate" title="Annotate" aria-pressed={drawing} onClick={toggleDrawing} disabled={busy}>
-        <Pencil size={17} />
-      </button>
       <input
         ref={slider}
         type="range"

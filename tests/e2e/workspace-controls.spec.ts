@@ -5,8 +5,10 @@ for (const width of [1440, 1100, 768, 390, 320]) {
   test(`workspace space and controls at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
+    await page.bringToFront();
     await page.getByRole("button", { name: "Editor", exact: true }).click();
     await replaceEditor(page.getByRole("textbox", { name: "Markdown source" }), "# Reading space\n\n" + "A paragraph for comfortable reading and scrolling.\n\n".repeat(100));
+    await page.getByRole("textbox", { name: "Markdown source" }).press("Control+Home");
     await expect(page.locator("article h1")).toHaveText("Reading space");
     await expect(page.locator(".page-context,.annotation-save,.local-badge,.panel-label")).toHaveCount(0);
     const theme = page.getByRole("button", { name: "Toggle document theme" });
@@ -26,8 +28,12 @@ for (const width of [1440, 1100, 768, 390, 320]) {
       const toolbarHeight = (await toolbar.boundingBox())!.height;
       const sourceHeight = await page.locator(".source-panel").evaluate(e => e.getBoundingClientRect().height);
       const previewHeight = await page.locator(".preview-panel").evaluate(e => e.getBoundingClientRect().height);
-      await scroller.focus(); await scroller.hover();
-      await page.waitForTimeout(100);
+      if (mode === "Editor") await page.getByRole("textbox", { name: "Markdown source" }).focus();
+      else await scroller.focus();
+      await scroller.hover();
+      // Focusing CodeMirror restores its cursor and may scroll it to the end.
+      await scroller.evaluate(e => e.scrollTop = 0);
+      await page.waitForTimeout(300);
       await page.mouse.wheel(0, 350);
       await expect(toolbar).toHaveClass(/toolbar-hidden/);
       await expect.poll(() => slot.evaluate(e => e.getBoundingClientRect().height)).toBe(0);
@@ -43,10 +49,12 @@ for (const width of [1440, 1100, 768, 390, 320]) {
       await scroller.evaluate(e => e.scrollTop = e.scrollHeight);
       await page.waitForTimeout(120);
       await expect(toolbar).toHaveClass(/toolbar-hidden/);
-      const bottom = await scroller.evaluate(e => e.scrollTop);
+      const bottom = await scroller.evaluate(e => ({ top: e.scrollTop, height: e.scrollHeight }));
       await page.mouse.wheel(0, -80);
       await expect(toolbar).not.toHaveClass(/toolbar-hidden/);
-      expect(await scroller.evaluate(e => e.scrollTop)).toBeGreaterThan(bottom - 220);
+      // CodeMirror replaces estimated heights as newly visible lines are measured.
+      const afterScroll = await scroller.evaluate(e => ({ top: e.scrollTop, height: e.scrollHeight }));
+      expect(afterScroll.top).toBeGreaterThan(bottom.top + afterScroll.height - bottom.height - 220);
       expect((await panels.boundingBox())!.height).toBeCloseTo(original.height, 0);
       await scroller.evaluate(e => e.scrollTop = 0);
       await page.screenshot({ path: `output/playwright/refined-${width}-${mode.replace(" ", "-")}.png` });

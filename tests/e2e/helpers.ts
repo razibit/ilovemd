@@ -16,9 +16,7 @@ export async function closeZoom(page: Page) {
   if (await trigger.getAttribute("aria-expanded") === "true") await trigger.click();
 }
 export async function toggleAnnotations(page: Page) {
-  await openZoom(page);
   await page.getByRole("button", { name: "Annotate", exact: true }).click();
-  await closeZoom(page);
 }
 export async function expectNotesSaved(page: Page) {
   await expect.poll(() => page.evaluate(async () => {

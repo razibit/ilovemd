@@ -21,6 +21,8 @@ export const defaultToolSettings: ToolSettings = {
 };
 export function AnnotationToolbar({
   settings: s,
+  pan,
+  chooseTool,
   visible,
   close,
   change,
@@ -33,6 +35,8 @@ export function AnnotationToolbar({
   selected,
 }: {
   settings: ToolSettings;
+  pan: boolean;
+  chooseTool: () => void;
   visible: boolean;
   close: () => void;
   change: (s: ToolSettings) => void;
@@ -50,9 +54,12 @@ export function AnnotationToolbar({
   const place = (x: number, y: number) => {
     const el = palette.current;
     if (!el) return;
+    const previewBounds = document.querySelector(".preview-scroll")?.getBoundingClientRect();
+    const minY = Math.max(8, previewBounds?.top ?? 8);
+    const maxY = Math.max(minY, (previewBounds?.bottom ?? innerHeight) - el.offsetHeight - 8);
     const next = {
       x: Math.max(8, Math.min(x, innerWidth - el.offsetWidth - 8)),
-      y: Math.max(8, Math.min(y, innerHeight - el.offsetHeight - 8)),
+      y: Math.max(minY, Math.min(y, maxY)),
     };
     position.current = next;
     el.style.left = `${next.x}px`;
@@ -102,12 +109,12 @@ export function AnnotationToolbar({
           const r = palette.current!.getBoundingClientRect(), step = e.shiftKey ? 20 : 5;
           place(r.left + (e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0),
             r.top + (e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0));
-        }}><GripHorizontal size={16} /><span>Annotations</span></button>
+        }}><GripHorizontal size={16} /><span>{pan ? "Annotations · Pan" : "Annotations"}</span></button>
       <button aria-label="Close annotation palette" title="Close annotation palette" onClick={close}><X size={16} /></button>
     </div>
     <div className="palette-tools" role="group" aria-label="Annotation tools">
-      {tools.map(([tool, label, Icon]) => <button key={tool} aria-label={label} title={label} aria-pressed={s.tool === tool}
-        onClick={() => change({ ...s, tool, width: tool === "highlighter" ? 18 : tool === "marker" ? 8 : 3, opacity: tool === "highlighter" ? .25 : 1 })}><Icon size={17} /></button>)}
+      {tools.map(([tool, label, Icon]) => <button key={tool} aria-label={label} title={label} aria-pressed={!pan && s.tool === tool}
+        onClick={() => { chooseTool(); change({ ...s, tool, width: tool === "highlighter" ? 18 : tool === "marker" ? 8 : 3, opacity: tool === "highlighter" ? .25 : 1 }); }}><Icon size={17} /></button>)}
     </div>
     <div className="palette-colors" role="group" aria-label="Stroke colors">
       {[["#b42332", "Red"], ["#d97706", "Amber"], ["#eab308", "Yellow"], ["#15803d", "Green"], ["#2563eb", "Blue"], ["#7c3aed", "Violet"], ["#202124", "Black"]].map(([color, name]) =>

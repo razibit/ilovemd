@@ -7,6 +7,7 @@ export function useToolbarVisibility(
   const [hidden, setHidden] = useState(false);
   const owner = useRef<Element | null>(null),
     last = useRef(0),
+    lastHeight = useRef(0),
     travel = useRef(0),
     intentAt = useRef(0);
   useLayoutEffect(() => {
@@ -37,8 +38,6 @@ export function useToolbarVisibility(
     const el = root.current;
     if (!el || !ready) return;
     const intent = (e: Event) => {
-      if (e instanceof PointerEvent && e.type === "pointermove" && !e.buttons)
-        return;
       if (
         e instanceof KeyboardEvent &&
         (e.ctrlKey ||
@@ -57,12 +56,16 @@ export function useToolbarVisibility(
       const target = (e.target as Element).closest(
         ".preview-scroll,.cm-scroller",
       );
-      if (target) intentAt.current = performance.now();
       if (target && owner.current !== target) {
         owner.current = target;
         last.current = target.scrollTop;
+        lastHeight.current = target.scrollHeight;
         travel.current = 0;
       }
+      // Establish the scroll owner before the browser applies a wheel scroll.
+      // Hover alone must not count as scrolling intent.
+      if (e instanceof PointerEvent && e.type === "pointermove" && !e.buttons) return;
+      if (target) intentAt.current = performance.now();
     };
     const scroll = (e: Event) => {
       const target = e.target as Element;
@@ -78,6 +81,15 @@ export function useToolbarVisibility(
       const y = target.scrollTop,
         delta = y - last.current;
       last.current = y;
+      const previousHeight = lastHeight.current;
+      lastHeight.current = target.scrollHeight;
+      // CodeMirror can shrink its measured content at the bottom. That clamp
+      // is not an upward navigation gesture and must not reopen the toolbar.
+      if (delta < 0 && target.scrollHeight < previousHeight &&
+          y >= target.scrollHeight - target.clientHeight - 2) {
+        travel.current = 0;
+        return;
+      }
       if (
         performance.now() < suppress.current ||
         performance.now() - intentAt.current > 500
