@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest an improvement for iLoveMd
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search existing issues first and describe the user problem rather than only the implementation idea.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and use case
+      description: Who would benefit, and what are they trying to accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the experience or outcome you would like.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or other approaches have you tried?
+  - type: textarea
+    id: accessibility
+    attributes:
+      label: Accessibility and compatibility
+      description: Note keyboard, screen-reader, responsive, browser, export, or multilingual considerations.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I have searched existing issues and this request is not a duplicate.
+          required: true
