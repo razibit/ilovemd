@@ -1,0 +1,296 @@
+.document {
+  --paper: #fff;
+  --ink: #26332e;
+  --muted: #606d65;
+  --rule: #dce3db;
+  --accent: #345b45;
+  --code: #f4f6f2;
+  --note: #f0f5ef;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Lora", "Noto Sans Bengali", "Noto Sans Arabic", Georgia, serif;
+  font-size: var(--doc-font, 16px);
+  line-height: var(--doc-leading, 1.8);
+  overflow-wrap: anywhere;
+  text-align: start;
+  color-scheme: light;
+}
+.document[data-theme="dark"] {
+  --paper: #202822;
+  --ink: #e4e9e2;
+  --muted: #acb8aa;
+  --rule: #455145;
+  --accent: #bdd7b0;
+  --code: #29352b;
+  --note: #2a372c;
+  color-scheme: dark;
+}
+.document h1,
+.document h2,
+.document h3,
+.document h4,
+.document h5,
+.document h6 {
+  font-family: "DM Sans", "Noto Sans Bengali", "Noto Sans Arabic", sans-serif;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  break-after: avoid;
+  overflow-wrap: anywhere;
+}
+.document h1 {
+  font-size: 2.35em;
+  line-height: 1.16;
+  margin: 0.2em 0 0.55em;
+  letter-spacing: -0.045em;
+}
+.document h2 {
+  font-size: 1.45em;
+  margin: 1.8em 0 0.65em;
+  padding-bottom: 0.45em;
+  border-bottom: 1px solid var(--rule);
+}
+.document h3 {
+  font-size: 1.15em;
+  margin: 1.5em 0 0.5em;
+}
+.document p {
+  margin: 0.75em 0 1em;
+  orphans: 3;
+  widows: 3;
+}
+.document a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.document blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 1.5em 0;
+  padding: 0.1em 1.3em;
+  color: var(--muted);
+}
+.document code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.85em;
+  background: var(--code);
+  padding: 0.12em 0.3em;
+  border-radius: 3px;
+}
+.document pre {
+  background: var(--code);
+  border: 1px solid var(--rule);
+  padding: 18px;
+  border-radius: 7px;
+  line-height: 1.65;
+  overflow: auto;
+  tab-size: 2;
+  font-size: 0.85em;
+}
+.document pre code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+.document pre pre {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+  overflow: visible;
+  font-size: inherit;
+}
+.document .shiki span {
+  color: var(--shiki-light);
+}
+.document[data-theme="dark"] .shiki span {
+  color: var(--shiki-dark);
+}
+.document table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.85em;
+  line-height: 1.6;
+  margin: 1.5em 0;
+  table-layout: auto;
+}
+.document th {
+  background: var(--code);
+  font-weight: 600;
+  text-align: left;
+}
+.document td,
+.document th {
+  border: 1px solid var(--rule);
+  padding: 10px 14px;
+  overflow-wrap: anywhere;
+}
+.document thead {
+  display: table-header-group;
+}
+.document tr {
+  break-inside: avoid;
+}
+.document img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1em auto;
+  break-inside: avoid;
+}
+.document figure {
+  margin: 1.5em 0;
+  break-inside: avoid;
+}
+.document figcaption {
+  font:
+    13px/1.6 "DM Sans",
+    sans-serif;
+  color: var(--muted);
+  text-align: center;
+}
+.document .math-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.6em 0;
+  break-inside: avoid;
+}
+.document .katex {
+  font-size: 1.08em;
+}
+.document .folio-note,
+.document .folio-tip,
+.document .folio-warning {
+  padding: 10px 20px;
+  border-left: 3px solid var(--accent);
+  background: var(--note);
+  margin: 1.5em 0;
+  border-radius: 0 6px 6px 0;
+}
+.document .folio-columns {
+  column-count: 2;
+  column-gap: 2em;
+  margin: 1.5em 0;
+}
+.document .folio-columns > :first-child {
+  margin-top: 0;
+}
+.document .folio-pagebreak {
+  border-top: 1px dashed var(--rule);
+  margin: 2em 0;
+}
+.document hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 2em 0;
+}
+.document .render-error {
+  border: 1px solid #b64d42;
+  background: #fff0ed;
+  color: #87271d;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+.document .diagram svg {
+  width: auto;
+  max-width: 100%;
+  max-height: 1200px;
+  height: auto;
+}
+.document .diagram {
+  font: 400 14px/normal "DM Sans", sans-serif;
+  break-inside: avoid;
+  text-align: center;
+}
+.document .diagram svg .node rect,
+.document .diagram svg .node polygon,
+.document .diagram svg .actor {
+  fill: var(--note);
+  stroke: var(--accent);
+}
+.document .diagram svg text,
+.document .diagram svg .label {
+  fill: var(--ink);
+  font-family: "DM Sans", sans-serif;
+}
+.document .diagram svg .flowchart-link,
+.document .diagram svg .messageLine0,
+.document .diagram svg .messageLine1 {
+  stroke: var(--accent);
+  fill: none;
+}
+.document .diagram svg marker path {
+  fill: var(--accent);
+}
+.document li {
+  margin: 0.25em 0;
+}
+.document input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+.document .footnotes {
+  font-size: 0.85em;
+}
+.document .citation {
+  color: var(--accent);
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.72em;
+  font-weight: 600;
+  line-height: 0;
+  margin-inline: 0.12em;
+  vertical-align: super;
+  white-space: nowrap;
+}
+.document .folio-video {
+  padding: 16px;
+  background: var(--code);
+}
+@media (max-width: 650px) {
+  .document .folio-columns {
+    column-count: 1;
+  }
+  .document h1 {
+    font-size: 1.9em;
+  }
+}
+@media print {
+  .document {
+    font-size: 11pt;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .document pre {
+    white-space: pre-wrap;
+    overflow: visible;
+    break-inside: auto;
+  }
+  .document pre code {
+    white-space: pre-wrap;
+  }
+  .document .folio-pagebreak {
+    break-before: page;
+    border: 0;
+    margin: 0;
+  }
+  .document .math-display {
+    overflow: visible;
+  }
+  .document .diagram svg {
+    max-height: 240mm;
+  }
+  .document .folio-columns {
+    column-count: 2;
+  }
+  .document h1,
+  .document h2,
+  .document h3 {
+    break-after: avoid-page;
+  }
+  .document table {
+    overflow: visible;
+  }
+  .document a {
+    overflow-wrap: anywhere;
+  }
+}
