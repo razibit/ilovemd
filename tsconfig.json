@@ -13,5 +13,5 @@
     "types": ["node", "vite/client"],
     "noEmit": true
   },
-  "include": ["apps", "packages", "tests", "playwright.config.ts"]
+  "include": ["apps", "packages", "tests", "worker", "playwright.config.ts"]
 }

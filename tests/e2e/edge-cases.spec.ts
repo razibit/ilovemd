@@ -5,6 +5,7 @@ import { defaultExportOptions } from "@folio/engine/types";
 import { fixture } from "../fixtures";
 import {unzipSync} from 'fflate';
 test('empty artifact responses are rejected without false success',async({page})=>{await page.goto('/');await expect(page.locator('article h1')).toBeVisible();await page.route('**/api/exports/*/0',route=>route.fulfill({status:204}));await page.getByRole('button',{name:'Export',exact:true}).click();await page.getByRole('button',{name:'Generate export preview'}).click();await expect(page.getByRole('alert')).toContainText('empty or intercepted');await expect(page.getByRole('button',{name:'Download document.pdf'})).toHaveCount(0)});
+test('empty API routing failures produce an actionable export error',async({page})=>{await page.goto('/');await page.route('**/api/exports',route=>route.fulfill({status:405,body:''}));await page.getByRole('button',{name:'Export',exact:true}).click();await page.getByRole('button',{name:'Generate export preview'}).click();await expect(page.getByRole('alert')).toContainText('export API route is not configured');});
 test("competing tabs retain both revisions instead of overwriting", async ({
   page,
   context,
@@ -151,7 +152,7 @@ test("typing and rendering performance measurements use 30 warm samples", async 
     ) + "\n\n";
   const source = "# Performance fixture\n\n" + math + paragraph.repeat(30);
   await replaceEditor(page.getByRole("textbox", { name: "Markdown source" }), source);
-  await expect(page.locator(".live-state")).toHaveText("Up to date");
+  await expect(page.getByRole("button", { name: "Annotate" })).toBeEnabled();
   for (let i = 0; i < 30; i++) {
     const start = performance.now();
     await page
@@ -159,7 +160,7 @@ test("typing and rendering performance measurements use 30 warm samples", async 
       .press("Control+End");
     await page.getByRole("textbox", { name: "Markdown source" }).press("x");
     input.push(performance.now() - start);
-    await expect(page.locator(".live-state")).toHaveText("Up to date");
+    await expect(page.getByRole("button", { name: "Annotate" })).toBeEnabled();
     samples.push(performance.now() - start);
   }
   samples.sort((a, b) => a - b);

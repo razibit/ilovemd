@@ -12,6 +12,37 @@ The Dockerfile builds the frontend, installs Chromium system dependencies, and r
 
 The installed Docker CLI was available during development, but Docker Desktop's Linux engine was not running. Therefore **container build, Linux sandbox operation and container smoke tests remain unverified**.
 
+## Cloudflare static site with an Azure export origin
+
+The production Worker serves `apps/web/dist` and routes only the documented
+`/api/*` methods to `EXPORT_ORIGIN`. Store `FOLIO_ACCESS_TOKEN` with
+`wrangler secret put`; never put it in `wrangler.json` or browser storage. The
+origin is expected to require that bearer token and to accept
+`https://ilovemd.tech` as an allowed origin.
+
+The zero-cost reference deployment uses one free-eligible Linux burstable VM,
+one free-eligible 64 GiB OS disk, no public IP, and a named Cloudflare Tunnel.
+Azure Cost Management budgets are delayed alerts, not hard spending caps.
+Before provisioning, verify the subscription's free-service page still shows
+remaining VM and disk allowances plus their expiry. Configure
+`FOLIO_MAX_CONCURRENCY=1` on a 1 GiB host and deallocate rather than resize if
+the representative export workload does not fit.
+
+For Azure for Students, the documented free VM allowance is 750 hours each of
+`Standard_B1s`, `Standard_B2pts_v2`, and `Standard_B2ats_v2`; the allowance is
+separate from the subscription's $100 credit. The subscription spending-limit
+flag may still be `Off`, so this deployment also requires a resource-group
+budget, an allowed-SKU policy restricted to `Standard_B1s`, and a positive
+free-benefit check before allocation. If Azure reports `SkuNotAvailable`, do
+not substitute a paid SKU: leave the resource group empty and retry capacity
+later.
+
+The origin VM must not enable Azure Backup, paid Defender plans, Log Analytics,
+snapshots, additional disks, a NAT Gateway, or a load balancer. A non-private
+subnet can provide Azure's nondeterministic default outbound path for the
+outbound-only tunnel; there is intentionally no inbound NSG rule. Operators
+who require deterministic egress must use a paid explicit outbound product.
+
 When a working Docker engine is available:
 
 ```text
@@ -25,7 +56,7 @@ Supply secrets through the operator's secret mechanism. Enter the matching acces
 
 - 2 MiB source, 10 MiB per image, 50 MiB decoded asset payload total, 500 assets, 32 MP decoded image limit.
 - 75 MiB HTTP body limit accounts for base64 expansion. No remote server asset fetching.
-- Two concurrent exports; overload returns 429. Twenty export requests per minute per direct client IP.
+- One concurrent export by default; `FOLIO_MAX_CONCURRENCY` can raise this to two on a sufficiently sized host. Overload returns 429. Twenty export requests per minute per direct client IP.
 - Parsing: separate worker, 256 MiB old-generation budget and ten-second timeout. Job: sixty-second cancellation deadline.
 - PNG output: 32 MP / 16,384-pixel dimension cap per capture, maximum 200 PDF page images, 64 MiB artifact cap.
 - At most twenty retained jobs and 128 MiB retained artifacts. Browser download releases the server copy. Abandoned jobs expire after ten minutes; cleanup runs every thirty seconds.

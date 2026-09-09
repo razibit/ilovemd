@@ -6,7 +6,7 @@ import { scientific } from "../fixtures";
 async function replaceSource(page: any, source: string) {
   const editor = page.getByRole("textbox", { name: "Markdown source" });
   await replaceEditor(editor, source);
-  await expect(page.locator(".live-state")).toHaveText("Up to date");
+  await expect(page.getByRole("button", { name: "Annotate" })).toBeEnabled();
 }
 test("editing, view switching, undo, themes, history and recovery", async ({
   page,

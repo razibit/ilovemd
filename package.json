@@ -11,7 +11,7 @@
     "dev": "concurrently -k -n web,export \"npm run dev -w @folio/web\" \"npm run dev -w @folio/export\"",
     "build": "npm run build -w @folio/web",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/engine.test.ts tests/export.test.ts tests/annotations.test.ts",
+    "test": "tsx --test tests/engine.test.ts tests/export.test.ts tests/annotations.test.ts tests/worker.test.ts",
     "test:e2e": "playwright test --project=chromium",
     "start": "tsx apps/export/src/server.ts",
     "licenses": "node scripts/licenses.mjs"

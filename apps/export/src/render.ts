@@ -16,6 +16,7 @@ import {
 const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, "../../..");
 let browserPromise: Promise<Browser> | undefined;
+let browserReady = false;
 let cssPromise: Promise<string> | undefined;
 export type ExportArtifact = { name: string; mime: string; bytes: Buffer };
 export type ArtifactResult = {
@@ -26,7 +27,11 @@ export async function closeRenderer() {
   if (browserPromise) {
     await (await browserPromise).close();
     browserPromise = undefined;
+    browserReady = false;
   }
+}
+export function isRendererReady() {
+  return browserReady;
 }
 async function inlineCss(file: string) {
   let css = await readFile(file, "utf8");
@@ -157,7 +162,15 @@ export async function createArtifacts(
     headless: true,
     chromiumSandbox: process.platform === "linux",
   });
-  const browser = await browserPromise;
+  let browser: Browser;
+  try {
+    browser = await browserPromise;
+    browserReady = true;
+  } catch (error) {
+    browserPromise = undefined;
+    browserReady = false;
+    throw error;
+  }
   const context = await browser.newContext({
     viewport: { width: annotated ? (annotations!.layout.mediaWidth ?? options.width) : options.width, height: 900 },
     deviceScaleFactor: options.scale,

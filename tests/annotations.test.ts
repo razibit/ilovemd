@@ -54,6 +54,10 @@ test("annotation transforms preserve geometry and reject unsafe export input", (
   });
   assert.match(annotationSvg(set.objects[0]), /opacity="0.25"/);
   validateAnnotations(set, snapshot);
+  validateAnnotations(
+    { ...set, layout: { ...set.layout, mediaWidth: 1 } },
+    snapshot,
+  );
   assert.throws(() =>
     validateAnnotations({ ...set, documentId: "other" }, snapshot),
   );

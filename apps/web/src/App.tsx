@@ -726,6 +726,23 @@ export function App() {
     }
   };
   const token = () => sessionStorage.getItem("folio-export-token") || "";
+  const responsePayload = async (response: Response) => {
+    const body = await response.text();
+    if (body) {
+      try {
+        return JSON.parse(body);
+      } catch {
+        // A gateway or proxy returned an unexpected non-JSON response.
+      }
+    }
+    const error =
+      response.status === 405
+        ? "The export API route is not configured on this deployment."
+        : response.status >= 500
+          ? "The export service is temporarily unavailable. Please try again shortly."
+          : `The export service returned HTTP ${response.status}.`;
+    return { error, code: "INVALID_EXPORT_RESPONSE" };
+  };
   const generateExport = async () => {
     const startedRevision = doc.revision, startedDocument = doc.id;
     setExporting(true);
@@ -749,7 +766,7 @@ export function App() {
         }),
         signal: exportAbort.current.signal,
       });
-      const data = await response.json();
+      const data = await responsePayload(response);
       if (!response.ok) {
         setExportDiagnostics(data.diagnostics ?? []);
         throw new Error(data.error || "Export failed");
@@ -763,12 +780,15 @@ export function App() {
         },
         signal: exportAbort.current.signal,
       });
-      if (!downloadResponse.ok)
+      if (!downloadResponse.ok) {
+        const failedDownload = await responsePayload(downloadResponse);
         throw new Error(
-          "Artifact download failed. Please generate the export again.",
+          failedDownload.error ||
+            "Artifact download failed. Please generate the export again.",
         );
+      }
       if(downloadResponse.status!==200)throw new Error('The artifact response was empty or intercepted by a download manager. No successful export has been recorded.');
-      const transfer=await downloadResponse.json();
+      const transfer=await responsePayload(downloadResponse);
       if(typeof transfer.data!=='string'||!transfer.byteLength)throw new Error('The export service returned an empty artifact.');
       const bytes=Uint8Array.from(atob(transfer.data),c=>c.charCodeAt(0));
       const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -790,7 +810,7 @@ export function App() {
         },
       });
     } catch (e) {
-      setExportError(String(e));
+      setExportError(e instanceof Error ? e.message : String(e));
       track({ event: "export_failed", export_format: exportOptions.format, annotations_included: !!exportOptions.includeAnnotations, error_code: errorCode(e) });
     } finally {
       setExporting(false);
