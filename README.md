@@ -35,8 +35,8 @@ Markdown is easy to author, but preparing a document for review or distribution 
 - **Keep the source portable.** Rendering does not rewrite the original Markdown.
 - **See edits in context.** Use editor, split, or preview mode, with an outline and optional synchronized scrolling.
 - **Review visually.** Draw, highlight, underline, add shapes and arrows, and preserve annotations with the document revision they belong to.
-- **Export what you inspected.** PDF preview displays the actual generated PDF bytes before download. The browser and export service share the same parsing and document styles.
-- **Work without a hosted account.** Drafts, local images, preferences, revision history, and annotations are stored in the browser. Service-backed exports are sent only when requested.
+- **Export what you inspected.** PDF preview displays the actual generated PDF bytes before download. Export runs in the browser with the same parsing and document styles as the preview.
+- **Work without a hosted account.** Drafts, local images, preferences, revision history, annotations, and exports stay in the browser.
 
 ## Features
 
@@ -57,7 +57,7 @@ For exact syntax, policies, and known limitations, read the [supported syntax gu
 
 - Freehand pen, marker, highlighter, underline, line, arrow, rectangle, circle, selection, move, erase, undo, and redo tools
 - Revision-aware annotation recovery and downloadable annotation backups
-- PDF, PNG, and standalone HTML generation through the export service
+- PDF, PNG, and standalone HTML generation directly in the browser
 - Direct browser downloads for Markdown and `.folio.zip` bundles containing source, settings, and referenced local images
 - Export preflight diagnostics for missing assets, rendering problems, and printable bounds
 - Configurable PDF paper, orientation, margins, theme, and background; PNG page, full-document, or selected-block output
@@ -70,7 +70,7 @@ Raw HTML is escaped and shown with a warning; arbitrary executable Markdown, MDX
 
 - [Node.js 22](https://nodejs.org/) (the repository's `.node-version` is `22`)
 - npm
-- Playwright Chromium for PDF, PNG, and standalone HTML exports
+- A modern browser with Canvas, SVG, and Web Worker support
 
 No database or application credentials are required for local use.
 
@@ -85,7 +85,7 @@ npm run build
 npm start
 ```
 
-Open <http://127.0.0.1:4174>. The production build is required because the export service uses the compiled browser runtime.
+Open <http://127.0.0.1:4174>. The production build checks the same static assets deployed to Cloudflare Workers.
 
 For active development:
 
@@ -93,7 +93,7 @@ For active development:
 npm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Vite serves the frontend and proxies `/api` requests to the export service on port `4174`.
+Open <http://127.0.0.1:5173>. Vite serves the frontend; export does not require a second local process.
 
 ## Using the workspace
 
@@ -124,8 +124,8 @@ Vite reads build-time options from `apps/web/.env.local`. `VITE_PORTFOLIO_URL` e
 - Local history retains up to 50 revisions. Conflicting tabs preserve a recovery copy instead of overwriting the current head.
 - Browser storage may be cleared, evicted, or lost. It is not cloud sync or a permanent backup.
 - Markdown and bundle exports are created in the browser.
-- PDF, PNG, and standalone HTML requests send the document snapshot and referenced assets to the configured export service. Generated server artifacts are held in memory and expire after ten minutes or are released after download; no database-backed document store exists.
-- Remote images are not fetched by the export server. They must first be explicitly fetched by the browser or uploaded.
+- PDF, PNG, and standalone HTML exports are created in the current browser tab. The document and referenced assets are not sent to an export service.
+- Remote images must first be explicitly stored by the browser or uploaded so exports remain self-contained.
 - Analytics is disabled in local development and automated tests by default. The repository supports a restricted GTM/GA4 integration, but deployments are responsible for enabling it appropriately and meeting any consent requirements.
 
 The deployed site's full notice is available at [ilovemd.tech/privacy](https://ilovemd.tech/privacy/). Self-hosters should review and adapt their own privacy disclosures and controls.
@@ -137,7 +137,7 @@ iLoveMd is an npm workspace written in TypeScript:
 | Path | Responsibility |
 | --- | --- |
 | `apps/web` | React and CodeMirror workspace, browser rendering, IndexedDB storage, annotations, and PDF.js preview |
-| `apps/export` | Fastify export API, isolated parser worker, Chromium rendering, and temporary artifact lifecycle |
+| `apps/export` | Optional legacy/reference renderer used for artifact comparison tests |
 | `packages/engine` | Shared Markdown parser, source mapping, directives, math, highlighting, and diagnostics |
 | `packages/themes` | Shared browser and print document styles |
 | `tests` | Parser, annotation, export, browser, accessibility, and regression coverage |
@@ -147,7 +147,7 @@ iLoveMd is an npm workspace written in TypeScript:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Run the Vite frontend and watched export service together |
+| `npm run dev` | Run the Vite frontend with browser-side export |
 | `npm run build` | Build the web application into `apps/web/dist` |
 | `npm start` | Serve the built app and export API on port `4174` by default |
 | `npm run typecheck` | Run the TypeScript compiler without emitting files |
@@ -168,20 +168,15 @@ npm run licenses
 
 For interactive browser debugging, use `npx playwright test --debug`; for a headed run without pausing, use `npx playwright test --headed`. Reports and traces are written to `output/playwright`, and PDF evidence is written to `output/pdf`.
 
-When changing `apps/web/src/export-runtime.ts`, diagram rendering, or shared document styles, rebuild before testing exports. Restart the export service after changing embedded font or style resources.
+When changing browser export, diagram rendering, or shared document styles, rebuild before testing exports.
 
 See [architecture and decisions](docs/architecture.md) for the rendering and storage design, and [validation](docs/validation.md) for the repository's recorded test evidence and its limits.
 
 ## Deployment
 
-The repository includes two distinct deployment paths:
+`wrangler.json` configures `apps/web/dist` as static Cloudflare Worker assets at `ilovemd.tech`. PDF, PNG, HTML, Markdown, and bundle export all execute in the visitor's browser; production needs no export origin, container, Browser Rendering binding, access token, or paid third-party service. The Dockerfile is retained only as a reference for the legacy renderer.
 
-- `wrangler.json` configures `apps/web/dist` as a Cloudflare static site at `ilovemd.tech`.
-- `Dockerfile` packages the built frontend together with the export service and Chromium.
-
-The Docker image runs as a non-root user, but the container build, Linux browser sandbox, and container smoke tests are currently recorded as unverified. Do not treat the included image as a hardened multi-tenant service. A public deployment needs TLS, authentication or an access gateway, exact origin/host controls, host-level egress restrictions, resource limits, monitoring, and validation in its target environment.
-
-Follow the [deployment and operational boundaries guide](docs/deployment.md) before exposing the export service beyond loopback.
+Follow the [deployment and export boundaries guide](docs/deployment.md) before publishing the Worker assets.
 
 ## Project status
 
@@ -189,8 +184,7 @@ The application, local development workflow, shared preview/export renderer, and
 
 Important current limitations include:
 
-- Docker/Linux sandbox operation and sustained load testing are still pending.
-- PDF tagging is enabled, but PDF/UA conformance and complete assistive-technology coverage are not claimed.
+- Browser-generated PDF pages are rasterized, so PDF tagging, selectable text, and PDF/UA conformance are not claimed.
 - Source/preview mapping has known limits around complex nested or unusually tall layouts.
 - Bundled fonts cover Latin, Bengali, and Arabic; other scripts depend on system fallback and need broader testing.
 - Browser storage quota exhaustion, asset garbage collection, and durable backup reminders need more work.

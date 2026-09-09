@@ -2,7 +2,7 @@
 
 ## Source of truth
 
-The original Markdown string is never reformatted by rendering. Positioned mdast nodes become sanitized hast nodes; application-owned transforms then add restricted KaTeX HTML/MathML, Shiki markup, accessible citation markers/references, and sanitized Mermaid SVG. The engine returns HTML, a block map, outline, diagnostics and an asset requirement list. Both browser preview and server export call this same engine. CSS supplies the intentional difference between continuous and paginated layout.
+The original Markdown string is never reformatted by rendering. Positioned mdast nodes become sanitized hast nodes; application-owned transforms then add restricted KaTeX HTML/MathML, Shiki markup, accessible citation markers/references, and sanitized Mermaid SVG. The engine returns HTML, a block map, outline, diagnostics and an asset requirement list. Both browser preview and browser export call this same engine.
 
 The browser worker is cancelled and recreated when an in-flight render is superseded, and terminated after ten seconds. Revision checks reject stale results. Server parsing runs in a worker with a 256 MiB old-generation limit and ten-second timeout. Math expansion and expression lengths are bounded. Parser failures preserve source and show the previous valid preview with a diagnostic.
 
@@ -12,11 +12,11 @@ IndexedDB schema v2 separates content-addressed image data from revision snapsho
 
 ## Export contract
 
-`POST /api/exports` accepts `{snapshot, options}` and returns a revision-bound artifact manifest, job ID, random access token and diagnostics. `GET /api/exports/:id/:index` requires `X-Export-Token`; `DELETE /api/exports/:id` releases the in-memory artifacts. TTL is ten minutes. The browser fetches the artifact into a Blob and releases its server copy; PDF.js previews that same Blob.
+The export dialog dynamically loads the browser exporter. It renders the selected immutable snapshot into an off-screen document, resolves diagrams, fonts and local images, and returns a Blob held only by the current tab. Revision checks reject an artifact if the document changes while it is generated. Cancellation and a sixty-second deadline use one abort signal, and a failed attempt leaves the dialog ready to retry.
 
-Document source and assets are sent only for explicitly requested service exports. No arbitrary HTML is accepted as a render API input. Browser contexts intercept every request and allow only bundled resources at a synthetic internal origin. Remote images must first be fetched explicitly by the user's browser or uploaded. This avoids a server-side arbitrary-URL proxy.
+Standalone HTML includes sanitized document markup, rendered SVG diagrams and inlined same-origin font resources. PNG uses a browser canvas; oversized full-document captures fall back to page images in a ZIP. PDF places those page canvases into the selected paper geometry. This preserves visual styling and annotation geometry without a remote browser process, but the resulting PDF is rasterized and is not tagged or text-selectable.
 
-Two simultaneous exports are admitted; excess requests receive a clear 429 response instead of entering an unbounded queue. Maximum 20 retained jobs. Full OS process isolation, per-tenant quotas and host-level egress restrictions remain deployment responsibilities.
+The Cloudflare Worker serves only static application assets. There is no production export API, secret, origin, container, browser binding, retained server artifact, or document upload. The Node/Playwright renderer remains solely as an optional reference implementation for comparison tests.
 
 ## Research basis (September 8, 2026)
 
@@ -25,7 +25,8 @@ Two simultaneous exports are admitted; excess requests receive a clear 429 respo
 - [CodeMirror repository migration](https://github.com/codemirror/dev) explains the archived GitHub repository. Packages continue to be published; archival alone was not treated as abandonment.
 - [KaTeX options](https://katex.org/docs/options) document HTML/MathML output, macro limits and trust restrictions. [MathJax accessibility](https://docs.mathjax.org/en/latest/basic/accessibility.html) motivates revisiting richer math exploration later.
 - [rehype-sanitize](https://github.com/rehypejs/rehype-sanitize) documents transform ordering. Raw user HTML is escaped here, and controlled math/highlighting is added after sanitization.
-- [Playwright PDF options](https://playwright.dev/docs/api/class-page) support tagged PDFs and outlines but do not guarantee accessible reading order or universal pagination.
+- [jsPDF](https://github.com/parallax/jsPDF) packages browser-rendered page images into directly downloadable PDF files.
+- [html2canvas](https://html2canvas.hertzen.com/) renders the supported document DOM without a server process; its CSS support boundary is treated as an export compatibility limit.
 - [Paged.js](https://github.com/pagedjs/pagedjs) was not added: native Chromium pagination avoids a second layout layer. Registry release 0.4.3 dates to July 2023; later adoption needs a separate maintenance and fidelity review.
 - [WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/) adds another layout engine; [Pandoc](https://pandoc.org/MANUAL.html) is reserved for potential DOCX/EPUB adapters with separate fidelity testing.
 - [WCAG 2.2](https://www.w3.org/TR/WCAG22/) guides contrast, focus, keyboard and reflow testing. Palette choices are not claimed to suit every reader.

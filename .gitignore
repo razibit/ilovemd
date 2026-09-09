@@ -4,5 +4,6 @@ output/
 test-results/
 playwright-report/
 .playwright-cli/
+.wrangler/
 .env
 *.log

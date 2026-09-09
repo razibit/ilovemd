@@ -725,24 +725,6 @@ export function App() {
       );
     }
   };
-  const token = () => sessionStorage.getItem("folio-export-token") || "";
-  const responsePayload = async (response: Response) => {
-    const body = await response.text();
-    if (body) {
-      try {
-        return JSON.parse(body);
-      } catch {
-        // A gateway or proxy returned an unexpected non-JSON response.
-      }
-    }
-    const error =
-      response.status === 405
-        ? "The export API route is not configured on this deployment."
-        : response.status >= 500
-          ? "The export service is temporarily unavailable. Please try again shortly."
-          : `The export service returned HTTP ${response.status}.`;
-    return { error, code: "INVALID_EXPORT_RESPONSE" };
-  };
   const generateExport = async () => {
     const startedRevision = doc.revision, startedDocument = doc.id;
     setExporting(true);
@@ -751,68 +733,55 @@ export function App() {
     setExportDiagnostics([]);
     setArtifact(null);
     exportAbort.current = new AbortController();
+    const deadline = setTimeout(
+      () => exportAbort.current?.abort(new Error("Export timed out after 60 seconds. Retry with a shorter document or lower scale.")),
+      60000,
+    );
     try {
       if (exportOptions.includeAnnotations && notes.stale && !exportPreserved) throw new Error("Choose the preserved annotated revision or disable Include annotations.");
-      const response = await fetch("/api/exports", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
-        },
-        body: JSON.stringify({
-          snapshot: exportOptions.includeAnnotations && exportPreserved && notes.set ? notes.set.snapshot : doc,
-          annotations: exportOptions.includeAnnotations && notes.set ? { ...notes.set, snapshot: undefined, previewHtml: undefined } : undefined,
-          options: { ...exportOptions, selection: selectedBlock },
-        }),
-        signal: exportAbort.current.signal,
-      });
-      const data = await responsePayload(response);
-      if (!response.ok) {
-        setExportDiagnostics(data.diagnostics ?? []);
-        throw new Error(data.error || "Export failed");
-      }
-      const info = data as ExportResult;
-      const downloadResponse = await fetch(info.artifacts[0].url, {
-          headers: {
-            "X-Export-Token": info.token,
-            Accept:'application/json',
-          ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
-        },
-        signal: exportAbort.current.signal,
-      });
-      if (!downloadResponse.ok) {
-        const failedDownload = await responsePayload(downloadResponse);
-        throw new Error(
-          failedDownload.error ||
-            "Artifact download failed. Please generate the export again.",
-        );
-      }
-      if(downloadResponse.status!==200)throw new Error('The artifact response was empty or intercepted by a download manager. No successful export has been recorded.');
-      const transfer=await responsePayload(downloadResponse);
-      if(typeof transfer.data!=='string'||!transfer.byteLength)throw new Error('The export service returned an empty artifact.');
-      const bytes=Uint8Array.from(atob(transfer.data),c=>c.charCodeAt(0));
-      const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(b=>b.toString(16).padStart(2,'0')).join('');
-      if(bytes.byteLength!==transfer.byteLength||hash!==transfer.sha256)throw new Error('Artifact integrity verification failed. Generate a fresh export.');
-      const blob=new Blob([bytes],{type:info.artifacts[0].mime});
+      const snapshot = exportOptions.includeAnnotations && exportPreserved && notes.set ? notes.set.snapshot : doc;
+      const { createBrowserArtifact } = await import("./browser-export");
+      const generated = await createBrowserArtifact(
+        snapshot,
+        { ...exportOptions, selection: selectedBlock },
+        exportAbort.current.signal,
+        exportOptions.includeAnnotations && notes.set
+          ? { ...notes.set, snapshot: notes.set.snapshot ?? snapshot }
+          : undefined,
+      );
       if (docRef.current.revision !== startedRevision || docRef.current.id !== startedDocument)
         throw new Error(
           "Document changed during export. Generate a fresh export.",
         );
-      setArtifact(blob);
+      const info: ExportResult = {
+        id: crypto.randomUUID(),
+        token: "",
+        revision: snapshot.revision,
+        status: generated.warnings.length ? "complete-with-warnings" : "complete",
+        warnings: generated.warnings,
+        artifacts: [{
+          name: generated.artifact.name,
+          mime: generated.artifact.mime,
+          url: "",
+        }],
+      };
+      setArtifact(generated.artifact.blob);
       setExportResult(info);
       setExportDiagnostics(info.warnings);
       track({ event: "export_completed", export_format: exportOptions.format, annotations_included: !!exportOptions.includeAnnotations });
-      void fetch(`/api/exports/${info.id}`, {
-        method: "DELETE",
-        headers: {
-          "X-Export-Token": info.token,
-          ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
-        },
-      });
     } catch (e) {
-      setExportError(e instanceof Error ? e.message : String(e));
+      if (e instanceof Error && "diagnostics" in e)
+        setExportDiagnostics((e as Error & { diagnostics: Diagnostic[] }).diagnostics);
+      const message =
+        e instanceof DOMException && e.name === "AbortError"
+          ? "Export cancelled. You can retry when ready."
+          : e instanceof Error
+            ? e.message
+            : String(e);
+      setExportError(message);
       track({ event: "export_failed", export_format: exportOptions.format, annotations_included: !!exportOptions.includeAnnotations, error_code: errorCode(e) });
     } finally {
+      clearTimeout(deadline);
       setExporting(false);
     }
   };
@@ -1696,24 +1665,12 @@ export function App() {
             >
               Convert HTML to Markdown…
             </button>
-            <h3>Export service</h3>
+            <h3>Private browser export</h3>
             <p className="help">
-              PDF, PNG and standalone HTML are processed at this app’s /api
-              export service when requested. Source editing and storage stay on
-              your device.
+              PDF, PNG and standalone HTML are generated in this browser.
+              Documents and local assets stay on your device; no access token
+              or export server is required.
             </p>
-            <label>
-              Access token
-              <input
-                type="password"
-                aria-label="Export access token"
-                defaultValue={token()}
-                onChange={(e) =>
-                  sessionStorage.setItem("folio-export-token", e.target.value)
-                }
-                placeholder="Optional for local service"
-              />
-            </label>
           </div>
         </Modal>
       )}
@@ -1972,8 +1929,8 @@ export function App() {
               <p className="eyebrow">EXPORT DOCUMENT</p>
               <h3>Your work, beautifully portable.</h3>
               <p className="help">
-                PDF, PNG and HTML use your configured export service. Markdown
-                and bundles download directly from this device.
+                PDF, PNG, HTML, Markdown and bundles are generated directly in
+                this browser. Nothing is uploaded.
               </p>
               <div className="format-options">
                 {(["pdf", "png", "html"] as const).map((format) => (
@@ -2168,7 +2125,9 @@ export function App() {
                 )}{" "}
                 {exporting
                   ? "Preparing your document…"
-                  : "Generate export preview"}
+                  : exportError
+                    ? "Retry export"
+                    : "Generate export preview"}
               </button>
               {exporting && (
                 <button
@@ -2243,7 +2202,7 @@ export function App() {
                   </p>
                   <span className="privacy-note">
                     <ShieldCheck size={14} />
-                    Temporary exports expire after 10 minutes.
+                    Export data stays in this browser tab.
                   </span>
                 </div>
               )}

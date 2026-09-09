@@ -63,7 +63,7 @@ $$
 
 A small note can carry a useful reference.[^note]
 
-[^note]: Your source stays on this device. PDF, PNG and standalone HTML generation use your configured export service only when requested.
+[^note]: Your source and export data stay on this device. PDF, PNG and standalone HTML are generated in your browser.
 `;
 export const templates: Record<string, string> = {
   "Blank document": "# Untitled\n\n",

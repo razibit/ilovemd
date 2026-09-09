@@ -95,7 +95,7 @@ test("missing image blocks export and explicitly acknowledged warning succeeds",
   await page
     .getByRole("checkbox", { name: "Export with visible warnings" })
     .check();
-  await page.getByRole("button", { name: "Generate export preview" }).click();
+  await page.getByRole("button", { name: "Retry export" }).click();
   await expect(
     page.getByRole("button", { name: "Download document.pdf" }),
   ).toBeVisible({ timeout: 45000 });

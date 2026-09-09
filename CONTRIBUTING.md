@@ -18,7 +18,7 @@ npx playwright install chromium
 npm run build
 ```
 
-Run `npm run dev` for the Vite workspace and export service, or `npm start` after a production build. See the [README quick start](README.md#quick-start) and [deployment guide](docs/deployment.md) for configuration and service boundaries.
+Run `npm run dev` for the Vite workspace with browser-side export, or `npm start` after a production build. See the [README quick start](README.md#quick-start) and [deployment guide](docs/deployment.md) for configuration and runtime boundaries.
 
 ## Make and validate changes
 

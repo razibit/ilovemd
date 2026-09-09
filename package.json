@@ -8,10 +8,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -k -n web,export \"npm run dev -w @folio/web\" \"npm run dev -w @folio/export\"",
+    "dev": "npm run dev -w @folio/web",
     "build": "npm run build -w @folio/web",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/engine.test.ts tests/export.test.ts tests/annotations.test.ts tests/worker.test.ts",
+    "test": "tsx --test tests/engine.test.ts tests/export.test.ts tests/annotations.test.ts",
     "test:e2e": "playwright test --project=chromium",
     "start": "tsx apps/export/src/server.ts",
     "licenses": "node scripts/licenses.mjs"
@@ -24,7 +24,6 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@types/turndown": "5.0.6",
-    "concurrently": "9.2.4",
     "prettier": "3.6.2",
     "tsx": "4.23.13",
     "typescript": "5.9.3"

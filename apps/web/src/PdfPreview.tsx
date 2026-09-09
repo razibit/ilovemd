@@ -39,8 +39,8 @@ export function PdfPreview({ blob }: { blob: Blob }) {
   return (
     <>
       <p className="help">
-        Actual exported PDF · visual preview. Download to inspect selectable
-        text and reading order.
+        Actual exported PDF · visual page preview. Browser-generated PDFs
+        preserve the rendered appearance but contain rasterized pages.
       </p>
       {error && <p role="alert">{error}</p>}
       <div className="pdf-pages" ref={root} />
