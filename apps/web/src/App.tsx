@@ -45,6 +45,7 @@ import {
   Maximize2,
   AlertCircle,
   X,
+  MoreVertical,
   Clock,
   FolderOpen,
   Download,
@@ -1121,7 +1122,7 @@ export function App() {
                 </button>
               ))}
             </div>
-            <details className="workspace-more" onKeyDown={e => { if (e.key === "Escape") { e.currentTarget.open = false; e.currentTarget.querySelector("summary")?.focus(); } }}><summary aria-label="More workspace controls">More</summary><div className="view-actions">
+            <details className="workspace-more" onKeyDown={e => { if (e.key === "Escape") { e.currentTarget.open = false; e.currentTarget.querySelector("summary")?.focus(); } }}><summary aria-label="More workspace controls" title="More controls"><MoreVertical size={16} /></summary><div className="view-actions">
               <button
                 className={`sync-toggle ${prefs.sync ? "enabled" : ""}`}
                 role="switch"
