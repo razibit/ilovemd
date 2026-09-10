@@ -14,7 +14,7 @@ IndexedDB schema v2 separates content-addressed image data from revision snapsho
 
 The export dialog dynamically loads the browser exporter. It renders the selected immutable snapshot into an off-screen document, resolves diagrams, fonts and local images, and returns a Blob held only by the current tab. Revision checks reject an artifact if the document changes while it is generated. Cancellation and a sixty-second deadline use one abort signal, and a failed attempt leaves the dialog ready to retry.
 
-Standalone HTML includes sanitized document markup, rendered SVG diagrams and inlined same-origin font resources. PNG uses a browser canvas; oversized full-document captures fall back to page images in a ZIP. PDF places those page canvases into the selected paper geometry. This preserves visual styling and annotation geometry without a remote browser process, but the resulting PDF is rasterized and is not tagged or text-selectable.
+Standalone HTML includes sanitized document markup, rendered SVG diagrams and inlined same-origin font resources. PNG uses a browser canvas; oversized full-document captures fall back to page images in a ZIP. PDF converts the rendered document into a tagged browser-side PDF definition, preserving searchable/selectable document text and repeating table header rows across page breaks. Complex math and diagrams are embedded as local images to preserve their rendered appearance. No remote browser process is required.
 
 The Cloudflare Worker serves only static application assets. There is no production export API, secret, origin, container, browser binding, retained server artifact, or document upload. The Node/Playwright renderer remains solely as an optional reference implementation for comparison tests.
 

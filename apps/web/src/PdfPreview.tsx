@@ -39,8 +39,8 @@ export function PdfPreview({ blob }: { blob: Blob }) {
   return (
     <>
       <p className="help">
-        Actual exported PDF · visual page preview. Browser-generated PDFs
-        preserve the rendered appearance but contain rasterized pages.
+        Actual exported PDF · visual page preview. Text remains searchable and
+        selectable, and continued tables repeat their header rows.
       </p>
       {error && <p role="alert">{error}</p>}
       <div className="pdf-pages" ref={root} />

@@ -73,6 +73,18 @@ test("PDF, PNG and standalone HTML export entirely in the browser", async ({ pag
     encoding: "utf8",
   });
   expect(Number(info.match(/Pages:\s+(\d+)/)?.[1])).toBeGreaterThan(1);
+  expect(info).toMatch(/Tagged:\s+yes/);
+  execFileSync("pdftotext", [
+    "-layout", "output/playwright/browser-regression.pdf",
+    "output/playwright/browser-regression.txt",
+  ]);
+  const pdfText = await readFile("output/playwright/browser-regression.txt", "utf8");
+  expect(pdfText).toContain("Browser export regression");
+  expect(pdfText).toContain("const exported: boolean = true");
+  expect(pdfText).toContain("FINAL_BROWSER_EXPORT_MARKER");
+  expect(pdfText).toContain("বাংলা");
+  expect(pdfText).toContain("العربية");
+  expect(pdfText).toContain("✓");
   execFileSync("pdftoppm", [
     "-f", "1", "-singlefile", "-scale-to", "1200", "-png",
     "output/playwright/browser-regression.pdf",
@@ -93,6 +105,33 @@ test("PDF, PNG and standalone HTML export entirely in the browser", async ({ pag
   expect(html).toContain("<svg");
   expect(html).not.toMatch(/<script/i);
   expect(apiRequests).toEqual([]);
+});
+
+test("continued PDF tables repeat searchable header rows", async ({ page }) => {
+  test.setTimeout(120_000);
+  const rows = Array.from(
+    { length: 100 },
+    (_, index) => `| Product ${String(index + 1).padStart(3, "0")} | ${index + 1} |`,
+  ).join("\n");
+  await page.goto("/");
+  await replaceEditor(
+    page.getByRole("textbox", { name: "Markdown source" }),
+    `# Repeated table headers\n\n| Product | Amount |\n| --- | ---: |\n${rows}\n\nTABLE_END_MARKER`,
+  );
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  const pdf = await generateAndDownload(page, "pdf", "repeated-table-headers.pdf");
+  expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
+  execFileSync("pdftotext", [
+    "-layout", "output/playwright/repeated-table-headers.pdf",
+    "output/playwright/repeated-table-headers.txt",
+  ]);
+  const pages = (await readFile("output/playwright/repeated-table-headers.txt", "utf8")).split("\f");
+  expect(pages.length).toBeGreaterThan(2);
+  for (const continuedPage of pages.filter((value) => value.trim())) {
+    expect(continuedPage).toMatch(/Product\s+Amount/);
+  }
+  expect(pages.join("\n")).toContain("Product 100");
+  expect(pages.join("\n")).toContain("TABLE_END_MARKER");
 });
 
 test("page-image ZIP, repeated export and empty documents are handled", async ({ page }) => {

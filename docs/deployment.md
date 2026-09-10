@@ -34,9 +34,10 @@ Documents and local assets are not sent to Cloudflare during export.
 - PDF and page-image exports are limited to 200 pages.
 - Each rendered canvas is limited to 32 megapixels. Oversized full-document PNG
   requests fall back to a ZIP of page images.
-- PDF pages are rasterized to preserve the inspected browser appearance and
-  annotations. They are not tagged and their text is not selectable. Use the
-  standalone HTML export when searchable/selectable content is required.
+- PDFs are generated as tagged documents with searchable/selectable document
+  text and repeated table header rows. Complex math and diagrams are embedded
+  as local images to preserve their rendered appearance. Formal PDF/UA conformance
+  still requires an external accessibility audit and is not claimed.
 - The browser waits for fonts, local images, and diagrams. Missing resources are
   reported through export preflight; the user can explicitly include visible
   diagnostics where supported.

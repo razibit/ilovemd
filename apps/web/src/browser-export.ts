@@ -1,6 +1,8 @@
 import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 import { zipSync } from "fflate";
+import bengaliFontUrl from "@expo-google-fonts/noto-sans-bengali/400Regular/NotoSansBengali_400Regular.ttf?url";
+import arabicFontUrl from "@expo-google-fonts/noto-sans-arabic/400Regular/NotoSansArabic_400Regular.ttf?url";
+import symbolFontUrl from "@expo-google-fonts/noto-sans-symbols-2/400Regular/NotoSansSymbols2_400Regular.ttf?url";
 import {
   escapeHtml,
   renderDocument,
@@ -18,6 +20,7 @@ import { renderDiagrams } from "./diagrams";
 const MAX_PIXELS = 32_000_000;
 const MAX_PAGES = 200;
 const MM_TO_PX = 96 / 25.4;
+const MM_TO_PT = 72 / 25.4;
 const paperSizes = {
   A4: [210, 297],
   Letter: [215.9, 279.4],
@@ -49,6 +52,246 @@ async function canvasBlob(canvas: HTMLCanvasElement) {
     canvas.toBlob(resolve, "image/png"),
   );
   if (!blob) throw new Error("The browser could not encode the export image.");
+  return blob;
+}
+
+async function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function prepareVectorPdfMarkup(
+  article: HTMLElement,
+  options: ExportOptions,
+  signal?: AbortSignal,
+) {
+  const clone = article.cloneNode(true) as HTMLElement;
+  for (const selector of [".katex", ".diagram"] as const) {
+    const originals = [...article.querySelectorAll<HTMLElement>(selector)];
+    const copies = [...clone.querySelectorAll<HTMLElement>(selector)];
+    for (let index = 0; index < originals.length; index++) {
+      checkAbort(signal);
+      const original = originals[index];
+      const copy = copies[index];
+      if (!copy) continue;
+      const canvas = await html2canvas(original, {
+        backgroundColor: null,
+        scale: Math.max(2, options.scale),
+        logging: false,
+        useCORS: false,
+      });
+      const image = document.createElement("img");
+      image.src = canvas.toDataURL("image/png");
+      image.alt = original.getAttribute("aria-label") || original.textContent?.trim() || selector;
+      image.width = Math.ceil(original.getBoundingClientRect().width);
+      image.height = Math.ceil(original.getBoundingClientRect().height);
+      image.dataset.pdfmake = JSON.stringify({ width: Math.min(image.width * 0.75, 480) });
+      copy.replaceWith(image);
+    }
+  }
+
+  for (const table of clone.querySelectorAll<HTMLTableElement>("table")) {
+    const rows = [...table.rows];
+    const explicitHeaders = table.tHead?.rows.length ?? 0;
+    const leadingHeaderRows = rows.findIndex((row) =>
+      [...row.cells].some((cell) => cell.tagName !== "TH"),
+    );
+    const headerRows = explicitHeaders || (leadingHeaderRows < 0 ? rows.length : leadingHeaderRows);
+    if (headerRows > 0 && headerRows < rows.length)
+      table.dataset.pdfmake = JSON.stringify({ headerRows, keepWithHeaderRows: 1 });
+  }
+
+  for (const image of clone.querySelectorAll<HTMLImageElement>("img")) {
+    checkAbort(signal);
+    if (image.src.startsWith("data:")) continue;
+    const response = await fetch(image.src);
+    if (!response.ok) throw new Error(`Image failed to load for PDF: HTTP ${response.status}`);
+    image.src = await blobToDataUrl(await response.blob());
+  }
+  return clone.innerHTML;
+}
+
+function walkPdfNodes(value: unknown, visit: (node: Record<string, unknown>) => void) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => walkPdfNodes(item, visit));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  const node = value as Record<string, unknown>;
+  visit(node);
+  Object.values(node).forEach((child) => walkPdfNodes(child, visit));
+}
+
+function splitContinuedTables(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(splitContinuedTables);
+  if (!value || typeof value !== "object") return value;
+  const node = value as Record<string, unknown>;
+  if (node.table && typeof node.table === "object") {
+    const table = node.table as Record<string, unknown>;
+    const body = Array.isArray(table.body) ? table.body : [];
+    if (body.length > 19) {
+      const header = body[0];
+      const chunks: Record<string, unknown>[] = [];
+      for (let index = 1; index < body.length; index += 18) {
+        chunks.push({
+          ...node,
+          pageBreak: index === 1 ? node.pageBreak : "before",
+          table: {
+            ...table,
+            body: [structuredClone(header), ...body.slice(index, index + 18)],
+            headerRows: 1,
+            dontBreakRows: true,
+          },
+        });
+      }
+      return { stack: chunks };
+    }
+  }
+  for (const [key, child] of Object.entries(node)) node[key] = splitContinuedTables(child);
+  return node;
+}
+
+async function fontFile(url: string, signal?: AbortSignal) {
+  checkAbort(signal);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`PDF font failed to load: HTTP ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  return btoa(binary);
+}
+
+function applyUnicodeFonts(node: Record<string, unknown>) {
+  if (typeof node.text !== "string" || typeof node.font === "string") return;
+  const runs: { text: string; font: string }[] = [];
+  for (const character of node.text) {
+    const font = /\p{Script=Bengali}/u.test(character)
+      ? "NotoBengali"
+      : /\p{Script=Arabic}/u.test(character)
+        ? "NotoArabic"
+        : character.codePointAt(0)! > 0x7f
+          ? "Symbols"
+          : "Roboto";
+    const previous = runs.at(-1);
+    if (previous?.font === font) previous.text += character;
+    else runs.push({ text: character, font });
+  }
+  if (runs.length === 1) {
+    if (runs[0].font !== "Roboto") node.font = runs[0].font;
+  } else if (runs.some((run) => run.font !== "Roboto")) node.text = runs;
+}
+
+async function createVectorPdf(
+  article: HTMLElement,
+  options: ExportOptions,
+  signal?: AbortSignal,
+) {
+  checkAbort(signal);
+  const [{ default: pdfMake }, { default: pdfFonts }, { default: htmlToPdfmake }] =
+    await Promise.all([
+      import("pdfmake/build/pdfmake"),
+      import("pdfmake/build/vfs_fonts"),
+      import("html-to-pdfmake"),
+    ]);
+  checkAbort(signal);
+  const [bengaliFont, arabicFont, symbolFont] = await Promise.all([
+    fontFile(bengaliFontUrl, signal),
+    fontFile(arabicFontUrl, signal),
+    fontFile(symbolFontUrl, signal),
+  ]);
+  const fontVfs = {
+    ...pdfFonts,
+    "NotoSansBengali.ttf": bengaliFont,
+    "NotoSansArabic.ttf": arabicFont,
+    "NotoSansSymbols2.ttf": symbolFont,
+  };
+  const fonts = {
+    Roboto: {
+      normal: "Roboto-Regular.ttf",
+      bold: "Roboto-Medium.ttf",
+      italics: "Roboto-Italic.ttf",
+      bolditalics: "Roboto-MediumItalic.ttf",
+    },
+    NotoBengali: {
+      normal: "NotoSansBengali.ttf",
+      bold: "NotoSansBengali.ttf",
+      italics: "NotoSansBengali.ttf",
+      bolditalics: "NotoSansBengali.ttf",
+    },
+    NotoArabic: {
+      normal: "NotoSansArabic.ttf",
+      bold: "NotoSansArabic.ttf",
+      italics: "NotoSansArabic.ttf",
+      bolditalics: "NotoSansArabic.ttf",
+    },
+    Symbols: {
+      normal: "NotoSansSymbols2.ttf",
+      bold: "NotoSansSymbols2.ttf",
+      italics: "NotoSansSymbols2.ttf",
+      bolditalics: "NotoSansSymbols2.ttf",
+    },
+  };
+  const markup = await prepareVectorPdfMarkup(article, options, signal);
+  const content = htmlToPdfmake(markup, {
+    window,
+    removeExtraBlanks: true,
+    tableAutoSize: true,
+  }) as unknown;
+
+  walkPdfNodes(content, (node) => {
+    applyUnicodeFonts(node);
+    if (node.table && typeof node.table === "object") {
+      const table = node.table as Record<string, unknown>;
+      const body = Array.isArray(table.body) ? table.body : [];
+      const columnCount = Array.isArray(body[0]) ? body[0].length : 0;
+      if (!Array.isArray(table.widths) && columnCount)
+        table.widths = Array(columnCount).fill("*");
+      if (body.length > 1 && columnCount > 0) {
+        table.body = [
+          (body[0] as Record<string, unknown>[]).map((cell) => ({
+            text: cell.text ?? "",
+            bold: true,
+            fillColor: cell.fillColor ?? "#eeeeee",
+          })),
+          ...body.slice(1),
+        ];
+        table.headerRows = 1;
+        delete table.keepWithHeaderRows;
+      }
+      if (typeof node.headerRows === "number" && table.headerRows === undefined)
+        table.headerRows = node.headerRows;
+    }
+  });
+  const paginatedContent = splitContinuedTables(content);
+
+  const background = options.theme === "dark" ? "#202822" : "#ffffff";
+  const foreground = options.theme === "dark" ? "#f1f5f2" : "#172019";
+  const documentDefinition = {
+    tagged: true,
+    displayTitle: true,
+    language: document.documentElement.lang || "en",
+    info: { title: "iLoveMd document", creator: "iLoveMd browser export" },
+    pageSize: options.paper,
+    pageOrientation: options.landscape ? "landscape" : "portrait",
+    pageMargins: Array(4).fill(options.margin * MM_TO_PT),
+    background: () => ({ canvas: [{ type: "rect", x: 0, y: 0, w: 2000, h: 2000, color: background }] }),
+    defaultStyle: { font: "Roboto", fontSize: 11, lineHeight: 1.32, color: foreground },
+    content: paginatedContent,
+  };
+  const output = pdfMake.createPdf(documentDefinition, undefined, fonts, fontVfs);
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    try {
+      output.getBlob(resolve);
+    } catch (error) {
+      reject(error);
+    }
+  });
+  checkAbort(signal);
   return blob;
 }
 
@@ -318,7 +561,18 @@ export async function createBrowserArtifact(
       }
     }
 
-    const { pages, geometry } = await pageCanvases(article, options, signal);
+    if (options.format === "pdf") {
+      return {
+        artifact: {
+          name: "document.pdf",
+          mime: "application/pdf",
+          blob: await createVectorPdf(article, options, signal),
+        },
+        warnings,
+      };
+    }
+
+    const { pages } = await pageCanvases(article, options, signal);
     if (options.format === "png") {
       const files: Record<string, Uint8Array> = {};
       for (let index = 0; index < pages.length; index++) {
@@ -336,36 +590,7 @@ export async function createBrowserArtifact(
       };
     }
 
-    const pdf = new jsPDF({
-      orientation: options.landscape ? "landscape" : "portrait",
-      unit: "mm",
-      format: options.paper.toLowerCase(),
-      compress: true,
-    });
-    for (let index = 0; index < pages.length; index++) {
-      checkAbort(signal);
-      if (index) pdf.addPage();
-      const canvas = pages[index];
-      const renderedHeight = (canvas.height / canvas.width) * (geometry.widthMm - options.margin * 2);
-      pdf.addImage(
-        canvas,
-        "PNG",
-        options.margin,
-        options.margin,
-        geometry.widthMm - options.margin * 2,
-        Math.min(renderedHeight, geometry.heightMm - options.margin * 2),
-        undefined,
-        "FAST",
-      );
-    }
-    return {
-      artifact: {
-        name: "document.pdf",
-        mime: "application/pdf",
-        blob: pdf.output("blob"),
-      },
-      warnings,
-    };
+    throw new Error("Unsupported export format.");
   } finally {
     host.remove();
   }

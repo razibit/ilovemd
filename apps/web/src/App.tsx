@@ -770,6 +770,7 @@ export function App() {
       setExportDiagnostics(info.warnings);
       track({ event: "export_completed", export_format: exportOptions.format, annotations_included: !!exportOptions.includeAnnotations });
     } catch (e) {
+      console.error("Browser export failed", e);
       if (e instanceof Error && "diagnostics" in e)
         setExportDiagnostics((e as Error & { diagnostics: Diagnostic[] }).diagnostics);
       const message =

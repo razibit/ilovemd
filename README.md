@@ -184,7 +184,7 @@ The application, local development workflow, shared preview/export renderer, and
 
 Important current limitations include:
 
-- Browser-generated PDF pages are rasterized, so PDF tagging, selectable text, and PDF/UA conformance are not claimed.
+- Browser-generated PDFs contain selectable text, a logical tag tree, and repeated table headers. Complex math and diagrams are embedded as local images to preserve their rendered appearance; formal PDF/UA conformance is not claimed.
 - Source/preview mapping has known limits around complex nested or unusually tall layouts.
 - Bundled fonts cover Latin, Bengali, and Arabic; other scripts depend on system fallback and need broader testing.
 - Browser storage quota exhaustion, asset garbage collection, and durable backup reminders need more work.
