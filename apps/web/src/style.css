@@ -286,7 +286,7 @@ kbd {
   gap: 10px;
   font-size: 12px;
   color: var(--muted);
-  padding: 11px 12px;
+  padding: 7px 12px;
   border-radius: 5px;
 }
 .sidebar-action svg:last-child:not(:first-child) {
@@ -344,7 +344,7 @@ kbd {
 .device-note {
   display: flex;
   gap: 9px;
-  padding: 17px 10px 22px;
+  padding: 10px 10px 13px;
   color: var(--muted);
   align-items: flex-start;
 }
@@ -355,7 +355,7 @@ kbd {
 }
 .device-note p {
   font-size: 10px;
-  margin: 4px 0 0;
+  margin: 2px 0 0;
 }
 .sidebar-footer {
   border-top: 1px solid var(--border);
