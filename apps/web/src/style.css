@@ -1574,10 +1574,10 @@ kbd {
 .workspace-toolbar .document-identity { min-width:0; }
 .workspace-toolbar button,.workspace-more summary { min-height:36px; }
 .interaction-controls { display:flex; gap:4px; margin-left:auto; }
-.interaction-controls button { display:grid; place-items:center; width:36px; height:36px; border-radius:5px; }
+.interaction-controls button { display:grid; place-items:center; width:32px; height:32px; border-radius:5px; }
 .interaction-controls button[aria-pressed=true] { background:var(--hover); color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
-.status-bar { min-height:44px; gap:6px; padding:0 8px; }
-.status-bar .diagnostic-status,.status-bar .zoom-button { min-height:36px; }
+.status-bar { min-height:38px; gap:6px; padding:0 8px; }
+.status-bar .diagnostic-status,.status-bar .zoom-button { min-height:32px; }
 .pan-active { touch-action:pan-x pan-y pinch-zoom; }
 .install-banner { flex-shrink:0; display:flex; align-items:center; gap:8px; padding:6px 12px; background:var(--surface); border-bottom:1px solid var(--border); font-size:12px; }
 .install-banner span { flex:1; min-width:0; }
