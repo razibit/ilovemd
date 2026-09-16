@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const GITHUB_URL = "https://github.com/razibit";
+const GITHUB_URL = "https://razibit.github.io";
 const DISMISS_KEY = "creator_attribution_dismissed_until";
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
