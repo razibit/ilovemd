@@ -45,8 +45,9 @@ test("quota failures retain independent drafts through document switching and re
   await expect(page.locator("article h1")).toHaveText("Unsaved quota B");
 });
 async function rename(page: Page, name: string) {
+  await page.getByRole("button", { name: "Document actions", exact: true }).click();
   page.once("dialog", (d) => d.accept(name));
-  await page.getByRole("button", { name: "Rename", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
 }
 
 test("a late renderer response cannot replace the selected document or its outline", async ({
@@ -146,7 +147,8 @@ test("deleting the last document creates a blank document and rejects stale-tab 
     expect(dialog.message()).toContain("Only document");
     await dialog.accept();
   });
-  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Document actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(page.locator(".document-title")).toHaveText("Untitled document");
   await expect(page.locator("article h1")).toHaveCount(0);
   await expect(page.locator(".save-indicator")).toContainText(
@@ -300,25 +302,22 @@ test("five documents isolate source, title, notes, outline, settings and operati
   const html = (await download(page, "html")).toString();
   expect(html).toContain("Only Unique 2");
   expect(html).not.toContain("Only Unique 1");
-  await page.getByRole("button", { name: "Duplicate", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Document 2 copy", exact: true }),
-  ).toBeVisible();
-  await expect(page.locator(".annotation-layer path").first()).toHaveAttribute(
-    "d",
-    paths[2],
-  );
-  await rename(page, "Renamed copy");
-  await source(page, "Copy edited independently");
+  // Creation remains in the existing +/Templates flow; the header only offers
+  // Rename/Delete. A new document must start without another document's notes.
+  await create(page, "Another document");
+  await expect(page.locator(".annotation-layer [data-note-id]")).toHaveCount(0);
+  await rename(page, "Renamed document");
+  await source(page, "Edited independently");
   await page.getByRole("button", { name: "Document 2", exact: true }).click();
   await expect(page.locator("article h1")).toHaveText("Unique 2");
   await page.reload();
   await expect(
-    page.getByRole("button", { name: "Renamed copy", exact: true }),
+    page.getByRole("button", { name: "Renamed document", exact: true }),
   ).toBeVisible();
   await expect(page.locator("article h1")).toHaveText("Unique 2");
   page.once("dialog", (d) => d.accept());
-  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Document actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Document 2", exact: true }),
   ).toHaveCount(0);

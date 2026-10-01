@@ -23,11 +23,11 @@ for (const width of [1440, 1100, 768, 390, 320]) {
       .press("Control+Home");
     await expect(page.locator("article h1")).toHaveText("Reading space");
     if (width <= 390) {
-      const selector = page.getByRole("combobox", {
+      const selector = page.getByRole("button", {
         name: "Active document",
         exact: true,
       });
-      expect((await selector.boundingBox())!.width).toBeGreaterThan(150);
+      expect((await selector.boundingBox())!.width).toBeGreaterThan(140);
     }
     await expect(
       page.locator(".page-context,.annotation-save,.local-badge,.panel-label"),

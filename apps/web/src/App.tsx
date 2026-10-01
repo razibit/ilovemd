@@ -69,6 +69,7 @@ import {
 import { measureLayout } from "./document-surface";
 import { WorkspaceController } from "./workspace-controller";
 import { WorkspaceList } from "./WorkspaceList";
+import { WorkspaceHeader } from "./WorkspaceHeader";
 import { Editor } from "./Editor";
 import { sample, templates } from "./sample";
 import {
@@ -1280,7 +1281,8 @@ export function App() {
           <span>iLoveMd<span className="brand-dot">.tech</span></span>
         </a>
         <span className="header-divider" />
-        <span className="workspace-name">Personal workspace</span>
+        <WorkspaceHeader documents={documents} active={doc.id} select={id => void selectDocument(id)}
+          rename={() => void renameDocument()} remove={() => void removeDocument()} />
 
         <div className="header-actions">
           <button
@@ -1303,7 +1305,6 @@ export function App() {
           <GitHubStarLink />
         </div>
       </header>
-      {!prefs.outline && <div className="compact-workspace"><label>Document <select aria-label="Active document" value={doc.id} onChange={e => void selectDocument(e.target.value)}>{documents.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}</select></label><button onClick={() => setModal('templates')}>New</button><button onClick={() => void renameDocument()}>Rename</button><button onClick={() => void duplicateDocument().catch(e => setNotice(String(e)))}>Duplicate</button><button onClick={() => void removeDocument()}>Delete</button></div>}
       <div className="app-body">
         {prefs.outline && (
           <aside className="sidebar">
@@ -1317,7 +1318,6 @@ export function App() {
               </IconButton>
             </div>
             <WorkspaceList documents={documents} active={doc.id} select={id => void selectDocument(id)} />
-            <div className="workspace-document-actions"><button onClick={() => void renameDocument()}>Rename</button><button onClick={() => void duplicateDocument().catch(e => setNotice(String(e)))}>Duplicate</button><button onClick={() => void removeDocument()}>Delete</button></div>
             <button
               className="sidebar-action"
               onClick={() => fileInput.current?.click()}

@@ -24,6 +24,9 @@ export function useToolbarVisibility(
     if (!el || !slot || !toolbar) return;
     const resize = () => {
       const height = hidden ? 0 : toolbar.getBoundingClientRect().height;
+      // The narrow-screen sidebar shares the measured toolbar boundary. This
+      // also follows wrapping and auto-hide instead of assuming a row height.
+      el.parentElement?.style.setProperty("--workspace-toolbar-height", `${height}px`);
       if (slot.style.height === `${height}px`) return;
       const positions = [
         ...el.querySelectorAll<HTMLElement>(".preview-scroll,.cm-scroller"),
