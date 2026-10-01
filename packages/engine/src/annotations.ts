@@ -36,6 +36,12 @@ export interface AnnotationSet {
     height: number;
   }[];
   layout: {
+    geometryVersion?: 2;
+    styleIdentity?: string;
+    border?: number[];
+    borderColor?: string;
+    fontFamily?: string;
+    columns?: number;
     mediaWidth?: number;
     width: number;
     height: number;
@@ -132,6 +138,11 @@ export function validateAnnotations(
     l.lineHeight < 1 ||
     l.lineHeight > 4 ||
     !["light", "dark"].includes(l.theme) ||
+    (l.geometryVersion !== undefined && l.geometryVersion !== 2) ||
+    (l.border !== undefined && (!Array.isArray(l.border) || l.border.length !== 4 || l.border.some(x => !finite(x) || x < 0 || x > 200))) ||
+    (l.columns !== undefined && ![1, 2].includes(l.columns)) ||
+    (l.fontFamily !== undefined && (typeof l.fontFamily !== 'string' || !/^[a-zA-Z ,"'-]+$/.test(l.fontFamily))) ||
+    (l.borderColor !== undefined && !/^(#[a-f0-9]{3,8}|rgba?\([\d.,% ]+\)|[a-z]+)$/i.test(l.borderColor)) ||
     !Array.isArray(l.padding) ||
     l.padding.length !== 4 ||
     l.padding.some((x) => !finite(x) || x < 0 || x > 200)

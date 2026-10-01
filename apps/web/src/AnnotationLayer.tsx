@@ -81,20 +81,22 @@ export function AnnotationLayer({
     },
     svg: SVGSVGElement,
   ): Point => {
-    const r = svg.getBoundingClientRect();
+    const matrix = svg.getScreenCTM();
+    if (!matrix) throw new Error('Annotation surface has no screen transformation.');
+    const local = new DOMPoint(e.clientX, e.clientY).matrixTransform(matrix.inverse());
     return {
       x: Math.max(
         0,
         Math.min(
           set.layout.width,
-          ((e.clientX - r.left) * set.layout.width) / r.width,
+          local.x,
         ),
       ),
       y: Math.max(
         0,
         Math.min(
           set.layout.height,
-          ((e.clientY - r.top) * set.layout.height) / r.height,
+          local.y,
         ),
       ),
       pressure: e.pointerType === "pen" ? e.pressure : undefined,

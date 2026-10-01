@@ -294,3 +294,12 @@
     overflow-wrap: anywhere;
   }
 }
+
+/* Content geometry is shared by preview, frozen revisions and browser exports. */
+.document { box-sizing:border-box; padding:35px 38px 45px; border:1px solid var(--rule); min-height:400px; border-radius:2px; }
+.document h1 { font-size:2.55em; }
+.document h2 { font-size:1.32em; }
+.document .folio-note { font-family:"DM Sans",sans-serif; font-size:.88em; }
+.document[data-annotated=true] .folio-columns { column-count:var(--annotation-columns,2); }
+.document-surface { position:relative; isolation:isolate; }
+.document-surface > svg { position:absolute; inset:0; pointer-events:none; }

@@ -128,6 +128,7 @@ export function usePreviewNavigation(
     };
   }, [preview, ready]);
   return {
+    cancelGesture: () => { const id = drag.current?.id; if (id !== undefined && preview.current?.hasPointerCapture(id)) preview.current.releasePointerCapture(id); drag.current = null; setHand(false); setSpace(false); },
     pan,
     hand,
     setHand,

@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
+import { EditorView } from "@codemirror/view";
 export function useToolbarVisibility(
   root: RefObject<HTMLElement | null>,
   suppress: RefObject<number>,
@@ -18,12 +25,59 @@ export function useToolbarVisibility(
     const resize = () => {
       const height = hidden ? 0 : toolbar.getBoundingClientRect().height;
       if (slot.style.height === `${height}px`) return;
-      const positions = [...el.querySelectorAll<HTMLElement>(".preview-scroll,.cm-scroller")]
-        .map(node => ({ node, top: node.scrollTop, left: node.scrollLeft }));
+      const positions = [
+        ...el.querySelectorAll<HTMLElement>(".preview-scroll,.cm-scroller"),
+      ].map((node) => {
+        const view = node.matches(".cm-scroller")
+          ? EditorView.findFromDOM(node)
+          : null;
+        const bounds = node.getBoundingClientRect();
+        const line = [...node.querySelectorAll<HTMLElement>(".cm-line")].find(
+          (line) => line.getBoundingClientRect().bottom > bounds.top,
+        );
+        return {
+          node,
+          top: node.scrollTop,
+          left: node.scrollLeft,
+          anchor:
+            view && line
+              ? {
+                  view,
+                  position: view.posAtDOM(line),
+                  offset: line.getBoundingClientRect().top - bounds.top,
+                }
+              : null,
+        };
+      });
       suppress.current = performance.now() + 80;
       slot.style.height = `${height}px`;
-      for (const { node, top, left } of positions) {
-        node.scrollTop = top;
+      for (const { node, top, left, anchor } of positions) {
+        if (anchor) {
+          // Preserve the actual reading position immediately before resizing.
+          // Passive wheel events can arrive after compositor scrolling; never
+          // apply their delta again. Restore only this scroller, not ancestors.
+          anchor.view.requestMeasure({
+            key: node,
+            read: (view) => {
+              if (!view.dom.isConnected) return null;
+              const at = view.domAtPos(anchor.position).node;
+              const line = (
+                at instanceof Element ? at : at.parentElement
+              )?.closest(".cm-line");
+              if (!line) return null;
+              return (
+                line.getBoundingClientRect().top -
+                node.getBoundingClientRect().top -
+                anchor.offset
+              );
+            },
+            write: (delta) => {
+              if (delta === null) return;
+              suppress.current = performance.now() + 80;
+              node.scrollTop += delta;
+            },
+          });
+        } else node.scrollTop = top;
         node.scrollLeft = left;
       }
       if (owner.current) last.current = owner.current.scrollTop;
@@ -53,7 +107,7 @@ export function useToolbarVisibility(
           ].includes(e.key))
       )
         return;
-      const target = (e.target as Element).closest(
+      const target = (e.target as Element).closest<HTMLElement>(
         ".preview-scroll,.cm-scroller",
       );
       if (target && owner.current !== target) {
@@ -64,7 +118,8 @@ export function useToolbarVisibility(
       }
       // Establish the scroll owner before the browser applies a wheel scroll.
       // Hover alone must not count as scrolling intent.
-      if (e instanceof PointerEvent && e.type === "pointermove" && !e.buttons) return;
+      if (e instanceof PointerEvent && e.type === "pointermove" && !e.buttons)
+        return;
       if (target) intentAt.current = performance.now();
     };
     const scroll = (e: Event) => {
@@ -85,8 +140,11 @@ export function useToolbarVisibility(
       lastHeight.current = target.scrollHeight;
       // CodeMirror can shrink its measured content at the bottom. That clamp
       // is not an upward navigation gesture and must not reopen the toolbar.
-      if (delta < 0 && target.scrollHeight < previousHeight &&
-          y >= target.scrollHeight - target.clientHeight - 2) {
+      if (
+        delta < 0 &&
+        target.scrollHeight < previousHeight &&
+        y >= target.scrollHeight - target.clientHeight - 2
+      ) {
         travel.current = 0;
         return;
       }

@@ -6,6 +6,7 @@ import type {
 } from "../../../packages/engine/src/annotations";
 import { validateAnnotations } from "../../../packages/engine/src/annotations";
 import { readAnnotations, saveAnnotations } from "./storage";
+import { measureLayout } from "./document-surface";
 import { download } from "./assets";
 
 export function useAnnotations(
@@ -38,9 +39,11 @@ export function useAnnotations(
       JSON.stringify(set.snapshot.assets) !== JSON.stringify(doc.assets) ||
       JSON.stringify(set.snapshot.settings) !== JSON.stringify(doc.settings) ||
       set.contextKey !== layoutKey);
+  const deleted = useRef(new Set<string>());
   const persist = (value: AnnotationSet) => {
+    if (deleted.current.has(value.documentId)) return;
     chain.current = chain.current.then(async () => {
-      if (lastSaved.current === value.version) return;
+      if (deleted.current.has(value.documentId) || lastSaved.current === value.version) return;
       try {
         await saveAnnotations(value, versions.current.get(value.id));
         versions.current.set(value.id, value.version);
@@ -60,6 +63,7 @@ export function useAnnotations(
           setError("");
         }
       } catch (e) {
+        if (deleted.current.has(value.documentId)) return;
         unsaved.current.set(value.id, value);
         setUnsavedCount(unsaved.current.size);
         if (latest.current?.id === value.id) {
@@ -151,6 +155,7 @@ export function useAnnotations(
       [...el.querySelectorAll("img")].map((i) => i.decode().catch(() => {})),
     );
     if (currentDoc.current !== original) {
+      if (currentDoc.current.id !== original.id) return;
       setError(
         "Document changed while preparing annotations. Try again after rendering completes.",
       );
@@ -166,7 +171,7 @@ export function useAnnotations(
     }
     const css = getComputedStyle(el),
       rect = el.getBoundingClientRect(),
-      factor = rect.width / el.offsetWidth;
+      factor = rect.width / parseFloat(css.width);
     if (!Number.isFinite(factor) || factor <= 0 || !el.offsetWidth || !el.offsetHeight) {
       setError("The page is still resizing. Wait a moment, then start annotations again.");
       return;
@@ -194,20 +199,7 @@ export function useAnnotations(
       blocks,
       contextKey: layoutKey,
       previewHtml: el.innerHTML,
-      layout: {
-        mediaWidth: innerWidth,
-        width: el.offsetWidth,
-        height: el.offsetHeight,
-        fontSize: parseFloat(css.getPropertyValue("--doc-font")) || 16,
-        lineHeight: Number(css.getPropertyValue("--doc-leading")) || 1.8,
-        padding: [
-          css.paddingTop,
-          css.paddingRight,
-          css.paddingBottom,
-          css.paddingLeft,
-        ].map(parseFloat),
-        theme: el.dataset.theme === "dark" ? "dark" : "light",
-      },
+      layout: measureLayout(el),
       objects: structuredClone(objects),
     };
     try {
@@ -246,6 +238,17 @@ export function useAnnotations(
     stale,
     enabled: enabled && !stale,
     loaded,
+    setEnabled,
+    discard: async (id: string) => {
+      deleted.current.add(id);
+      for (const [key, value] of unsaved.current)
+        if (value.documentId === id) unsaved.current.delete(key);
+      if (latest.current?.documentId === id) latest.current = null;
+      if (currentDoc.current.id === id) { setSet(null); setEnabled(false); }
+      setUnsavedCount(unsaved.current.size);
+      await chain.current;
+    },
+    flush: () => { if (latest.current && latest.current.documentId === currentDoc.current.id) persist(latest.current); return chain.current; },
     status,
     error,
     capture,

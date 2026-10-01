@@ -1604,3 +1604,19 @@ kbd {
 .status-bar .diagnostic-status { margin-left:0; }
 @container (max-width:380px) { .workspace-toolbar .view-switch { padding:0; } }
 .interaction-controls button,.annotation-toolbar button,.workspace-toolbar button { touch-action:manipulation; }
+
+.workspace-documents { max-height:240px; overflow:auto; }
+.workspace-document-actions { display:flex; gap:4px; padding:6px 10px; }
+.workspace-document-actions button { font-size:11px; padding:5px; }
+.compact-workspace { display:flex; gap:6px; align-items:center; padding:5px 10px; border-bottom:1px solid var(--border); }
+.compact-workspace select { max-width:180px; }
+.compact-workspace button { font-size:11px; }
+.compact-workspace label { display:flex; gap:4px; align-items:center; min-width:0; flex:1; }
+.compact-workspace select { min-width:0; width:100%; font-size:11px; }
+.compact-workspace button { padding:4px; flex-shrink:0; }
+@media (max-width:480px) {
+ .compact-workspace { flex-wrap:wrap; }
+ .compact-workspace label { flex-basis:100%; }
+ .compact-workspace select { max-width:none; }
+ .compact-workspace button:first-of-type { margin-left:auto; }
+}

@@ -28,14 +28,48 @@ ${"A long paragraph exercises browser-side pagination without a remote service.\
 FINAL_BROWSER_EXPORT_MARKER
 `;
 
+test("clean PNG width remains configurable without reusing annotation geometry", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.locator("article h1")).toBeVisible();
+  await replaceEditor(
+    page.getByRole("textbox", { name: "Markdown source" }),
+    "# PNG width control\n\n" +
+      "A paragraph exercises the explicit image width setting.\n\n".repeat(12),
+  );
+  await expect(page.locator("article h1")).toHaveText("PNG width control");
+  for (const width of [400, 1000]) {
+    await page.getByRole("button", { name: "Export", exact: true }).click();
+    await page.getByRole("button", { name: "PNG Capture & present" }).click();
+    await page
+      .getByRole("spinbutton", { name: "Width (px)", exact: true })
+      .fill(String(width));
+    await page
+      .getByRole("spinbutton", { name: "Scale", exact: true })
+      .fill("1");
+    const bytes = await generateAndDownload(
+      page,
+      "png",
+      `clean-width-${width}.png`,
+    );
+    expect((await sharp(bytes).metadata()).width).toBe(width);
+    await page.getByRole("button", { name: "Close dialog" }).click();
+  }
+});
+
 async function prepare(page: import("@playwright/test").Page) {
   const apiRequests: string[] = [];
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname.startsWith("/api/")) apiRequests.push(request.url());
+    if (new URL(request.url()).pathname.startsWith("/api/"))
+      apiRequests.push(request.url());
   });
   await page.goto("/");
   await expect(page.locator("article h1")).toBeVisible();
-  await replaceEditor(page.getByRole("textbox", { name: "Markdown source" }), documentSource);
+  await replaceEditor(
+    page.getByRole("textbox", { name: "Markdown source" }),
+    documentSource,
+  );
   await expect(page.locator("article .diagram svg").first()).toBeVisible();
   await page.getByRole("button", { name: "Export", exact: true }).click();
   return apiRequests;
@@ -52,8 +86,12 @@ async function generateAndDownload(
     html: "HTML Publish & archive",
   };
   await page.getByRole("button", { name: labels[format] }).click();
-  await page.getByRole("button", { name: /Generate export preview|Retry export/ }).click();
-  const button = page.getByRole("button", { name: new RegExp(`Download document\\.${format}`) });
+  await page
+    .getByRole("button", { name: /Generate export preview|Retry export/ })
+    .click();
+  const button = page.getByRole("button", {
+    name: new RegExp(`Download document\\.${format}`),
+  });
   await expect(button).toBeVisible({ timeout: 60_000 });
   const downloadPromise = page.waitForEvent("download");
   await button.click();
@@ -63,22 +101,32 @@ async function generateAndDownload(
   return readFile(path);
 }
 
-test("PDF, PNG and standalone HTML export entirely in the browser", async ({ page }) => {
+test("PDF, PNG and standalone HTML export entirely in the browser", async ({
+  page,
+}) => {
   test.setTimeout(180_000);
   const apiRequests = await prepare(page);
 
   const pdf = await generateAndDownload(page, "pdf", "browser-regression.pdf");
   expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
-  const info = execFileSync("pdfinfo", ["output/playwright/browser-regression.pdf"], {
-    encoding: "utf8",
-  });
+  const info = execFileSync(
+    "pdfinfo",
+    ["output/playwright/browser-regression.pdf"],
+    {
+      encoding: "utf8",
+    },
+  );
   expect(Number(info.match(/Pages:\s+(\d+)/)?.[1])).toBeGreaterThan(1);
   expect(info).toMatch(/Tagged:\s+yes/);
   execFileSync("pdftotext", [
-    "-layout", "output/playwright/browser-regression.pdf",
+    "-layout",
+    "output/playwright/browser-regression.pdf",
     "output/playwright/browser-regression.txt",
   ]);
-  const pdfText = await readFile("output/playwright/browser-regression.txt", "utf8");
+  const pdfText = await readFile(
+    "output/playwright/browser-regression.txt",
+    "utf8",
+  );
   expect(pdfText).toContain("Browser export regression");
   expect(pdfText).toContain("const exported: boolean = true");
   expect(pdfText).toContain("FINAL_BROWSER_EXPORT_MARKER");
@@ -86,20 +134,50 @@ test("PDF, PNG and standalone HTML export entirely in the browser", async ({ pag
   expect(pdfText).toContain("العربية");
   expect(pdfText).toContain("✓");
   execFileSync("pdftoppm", [
-    "-f", "1", "-singlefile", "-scale-to", "1200", "-png",
+    "-f",
+    "1",
+    "-singlefile",
+    "-scale-to",
+    "1200",
+    "-png",
     "output/playwright/browser-regression.pdf",
     "output/playwright/browser-regression-page",
   ]);
-  const pdfPage = await sharp("output/playwright/browser-regression-page.png").stats();
+  const pdfPage = await sharp(
+    "output/playwright/browser-regression-page.png",
+  ).stats();
   expect(pdfPage.channels.some((channel) => channel.stdev > 10)).toBeTruthy();
 
+  await page.getByRole("button", { name: "PNG Capture & present" }).click();
+  await page
+    .getByRole("spinbutton", { name: "Width (px)", exact: true })
+    .fill("600");
   const png = await generateAndDownload(page, "png", "browser-regression.png");
   const pngMeta = await sharp(png).metadata();
   expect(pngMeta.format).toBe("png");
-  expect(pngMeta.width).toBe(1440);
+  expect(pngMeta.width).toBe(600);
   expect(pngMeta.height).toBeGreaterThan(1000);
+  await page
+    .getByRole("combobox", { name: "Background", exact: true })
+    .selectOption("transparent");
+  const transparent = await generateAndDownload(
+    page,
+    "png",
+    "browser-transparent.png",
+  );
+  const corner = await sharp(transparent)
+    .ensureAlpha()
+    .extract({ left: 8, top: 8, width: 1, height: 1 })
+    .raw()
+    .toBuffer();
+  expect(corner[3]).toBe(0);
+  await page
+    .getByRole("combobox", { name: "Background", exact: true })
+    .selectOption("theme");
 
-  const html = (await generateAndDownload(page, "html", "browser-regression.html")).toString();
+  const html = (
+    await generateAndDownload(page, "html", "browser-regression.html")
+  ).toString();
   expect(html).toContain("FINAL_BROWSER_EXPORT_MARKER");
   expect(html).toContain("data:font/");
   expect(html).toContain("<svg");
@@ -111,7 +189,8 @@ test("continued PDF tables repeat searchable header rows", async ({ page }) => {
   test.setTimeout(120_000);
   const rows = Array.from(
     { length: 100 },
-    (_, index) => `| Product ${String(index + 1).padStart(3, "0")} | ${index + 1} |`,
+    (_, index) =>
+      `| Product ${String(index + 1).padStart(3, "0")} | ${index + 1} |`,
   ).join("\n");
   await page.goto("/");
   await replaceEditor(
@@ -119,13 +198,20 @@ test("continued PDF tables repeat searchable header rows", async ({ page }) => {
     `# Repeated table headers\n\n| Product | Amount |\n| --- | ---: |\n${rows}\n\nTABLE_END_MARKER`,
   );
   await page.getByRole("button", { name: "Export", exact: true }).click();
-  const pdf = await generateAndDownload(page, "pdf", "repeated-table-headers.pdf");
+  const pdf = await generateAndDownload(
+    page,
+    "pdf",
+    "repeated-table-headers.pdf",
+  );
   expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
   execFileSync("pdftotext", [
-    "-layout", "output/playwright/repeated-table-headers.pdf",
+    "-layout",
+    "output/playwright/repeated-table-headers.pdf",
     "output/playwright/repeated-table-headers.txt",
   ]);
-  const pages = (await readFile("output/playwright/repeated-table-headers.txt", "utf8")).split("\f");
+  const pages = (
+    await readFile("output/playwright/repeated-table-headers.txt", "utf8")
+  ).split("\f");
   expect(pages.length).toBeGreaterThan(2);
   for (const continuedPage of pages.filter((value) => value.trim())) {
     expect(continuedPage).toMatch(/Product\s+Amount/);
@@ -134,35 +220,74 @@ test("continued PDF tables repeat searchable header rows", async ({ page }) => {
   expect(pages.join("\n")).toContain("TABLE_END_MARKER");
 });
 
-test("page-image ZIP, repeated export and empty documents are handled", async ({ page }) => {
+test("page-image ZIP, repeated export and empty documents are handled", async ({
+  page,
+}) => {
   test.setTimeout(180_000);
   await prepare(page);
   await page.getByRole("button", { name: "PNG Capture & present" }).click();
   await page.getByRole("combobox", { name: "Capture" }).selectOption("pages");
+  await page.getByRole("spinbutton", { name: "Scale", exact: true }).fill("1");
   await page.getByRole("button", { name: "Generate export preview" }).click();
-  const zipButton = page.getByRole("button", { name: "Download document-pages.zip" });
+  const zipButton = page.getByRole("button", {
+    name: "Download document-pages.zip",
+  });
   await expect(zipButton).toBeVisible({ timeout: 60_000 });
   let downloadPromise = page.waitForEvent("download");
   await zipButton.click();
   let download = await downloadPromise;
   await download.saveAs("output/playwright/browser-pages.zip");
-  const pages = unzipSync(await readFile("output/playwright/browser-pages.zip"));
-  expect(Object.keys(pages).filter((name) => name.endsWith(".png")).length).toBeGreaterThan(1);
+  const pages = unzipSync(
+    await readFile("output/playwright/browser-pages.zip"),
+  );
+  expect(
+    Object.keys(pages).filter((name) => name.endsWith(".png")).length,
+  ).toBeGreaterThan(1);
+  for (const [name, bytes] of Object.entries(pages)) {
+    if (!name.endsWith(".png")) continue;
+    const metadata = await sharp(bytes).metadata();
+    expect(metadata.width).toBe(794);
+    expect(metadata.height).toBe(1123);
+  }
 
+  await page
+    .getByRole("combobox", { name: "Background", exact: true })
+    .selectOption("transparent");
   await page.getByRole("button", { name: "Generate export preview" }).click();
   await expect(zipButton).toBeVisible({ timeout: 60_000 });
+  downloadPromise = page.waitForEvent("download");
+  await zipButton.click();
+  download = await downloadPromise;
+  const transparentPages = unzipSync(await readFile((await download.path())!));
+  for (const [name, bytes] of Object.entries(transparentPages)) {
+    if (!name.endsWith(".png")) continue;
+    const corner = await sharp(bytes)
+      .ensureAlpha()
+      .extract({ left: 8, top: 8, width: 1, height: 1 })
+      .raw()
+      .toBuffer();
+    expect(corner[3]).toBe(0);
+  }
 
   await page.getByRole("button", { name: "Close dialog" }).click();
-  await replaceEditor(page.getByRole("textbox", { name: "Markdown source" }), "");
+  await replaceEditor(
+    page.getByRole("textbox", { name: "Markdown source" }),
+    "",
+  );
   await page.getByRole("button", { name: "Export", exact: true }).click();
   await page.getByRole("button", { name: "PNG Capture & present" }).click();
-  await page.getByRole("combobox", { name: "Capture" }).selectOption("document");
+  await page
+    .getByRole("combobox", { name: "Capture" })
+    .selectOption("document");
   await page.getByRole("button", { name: "Generate export preview" }).click();
-  await expect(page.getByRole("button", { name: "Download document.png" })).toBeVisible({ timeout: 60_000 });
-
+  await expect(
+    page.getByRole("button", { name: "Download document.png" }),
+  ).toBeVisible({ timeout: 60_000 });
 });
 
-test("an in-progress browser export can be cancelled and retried", async ({ page }) => {
+test("an in-progress browser export can be cancelled and retried", async ({
+  page,
+}) => {
   await page.route("**/browser-export-*.js", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1200));
     await route.continue();
@@ -172,6 +297,10 @@ test("an in-progress browser export can be cancelled and retried", async ({ page
   await page.getByRole("button", { name: "Export", exact: true }).click();
   await page.getByRole("button", { name: "Generate export preview" }).click();
   await page.getByRole("button", { name: "Cancel export" }).click();
-  await expect(page.getByRole("alert")).toContainText("cancelled", { timeout: 10_000 });
-  await expect(page.getByRole("button", { name: "Retry export" })).toBeEnabled();
+  await expect(page.getByRole("alert")).toContainText("cancelled", {
+    timeout: 10_000,
+  });
+  await expect(
+    page.getByRole("button", { name: "Retry export" }),
+  ).toBeEnabled();
 });

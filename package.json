@@ -11,10 +11,11 @@
     "dev": "npm run dev -w @folio/web",
     "build": "npm run build -w @folio/web",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/engine.test.ts tests/export.test.ts tests/annotations.test.ts",
+    "test": "tsx --test tests/engine.test.ts tests/export.test.ts tests/annotations.test.ts tests/workspace.test.ts",
     "test:e2e": "playwright test --project=chromium",
     "start": "tsx apps/export/src/server.ts",
-    "licenses": "node scripts/licenses.mjs"
+    "licenses": "node scripts/licenses.mjs",
+    "test:reference": "playwright test --config playwright.reference.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

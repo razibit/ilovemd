@@ -5,14 +5,18 @@
 Run `npm ci`, then `npm run dev` and open <http://127.0.0.1:5173>.
 PDF, PNG, and standalone HTML exports run in the browser, so local development
 does not need Chromium installed by Playwright and does not need a second API
-process. `npm run build && npm start` serves the production bundle on
-<http://127.0.0.1:4174> for production-build validation.
+process. Run `npm run build`, then `npm exec -w @folio/web vite preview -- --host 127.0.0.1 --port 4174`
+for static production-build validation.
 
 The legacy Node renderer under `apps/export` remains as a reference renderer
 and for artifact-level regression comparisons. It is not used by the web app or
 the Cloudflare deployment.
 
-## Cloudflare Workers
+## Static Cloudflare hosting
+
+Cloudflare Pages can publish `apps/web/dist` after `npm run build`. All document
+storage and rendering stay in the browser. The existing Wrangler configuration
+is an alternative static-assets host, with no processing bindings required.
 
 `wrangler.json` deploys `apps/web/dist` as static Worker assets with SPA
 fallback. Build and preview it with:
@@ -35,8 +39,10 @@ Documents and local assets are not sent to Cloudflare during export.
 - Each rendered canvas is limited to 32 megapixels. Oversized full-document PNG
   requests fall back to a ZIP of page images.
 - PDFs are generated as tagged documents with searchable/selectable document
-  text and repeated table header rows. Complex math and diagrams are embedded
-  as local images to preserve their rendered appearance. Formal PDF/UA conformance
+  text and repeated table header rows. Ordinary text and annotations remain vector
+  graphics. Unsupported styled regions, complex scripts, math, and diagrams use
+  local images at a minimum effective 300 DPI, with selectable text retained.
+  Adding annotations uses the same layout and quality as a clean PDF. Formal PDF/UA conformance
   still requires an external accessibility audit and is not claimed.
 - The browser waits for fonts, local images, and diagrams. Missing resources are
   reported through export preflight; the user can explicitly include visible

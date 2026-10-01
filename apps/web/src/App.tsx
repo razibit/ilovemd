@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   lazy,
@@ -65,11 +66,16 @@ import {
   type Asset,
   type ExportResult,
 } from "@folio/engine/types";
+import { measureLayout } from "./document-surface";
+import { WorkspaceController } from "./workspace-controller";
+import { WorkspaceList } from "./WorkspaceList";
 import { Editor } from "./Editor";
 import { sample, templates } from "./sample";
 import {
   restore,
   save,
+  listDocuments, activateDocument, writeDocument, deleteDocument, readAnnotations, saveAnnotations,
+  type WorkspaceDocument,
   history,
   readPreferences,
   writePreferences,
@@ -271,7 +277,7 @@ export function App() {
     preview = useRef<HTMLDivElement>(null),
     article = useRef<HTMLElement>(null),
     workspace = useRef<HTMLDivElement>(null),
-    version = useRef<string | undefined>(undefined),
+    controller = useRef(new WorkspaceController(save)),
     docRef = useRef(doc),
     fileInput = useRef<HTMLInputElement>(null),
     imageInput = useRef<HTMLInputElement>(null),
@@ -287,7 +293,7 @@ export function App() {
     syncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
     conflicted = useRef(false),
     exportAbort = useRef<AbortController | null>(null),
-    saveChain = useRef(Promise.resolve());
+    switchEpoch = useRef(0);
   const surface = useRef<HTMLDivElement>(null), mainWorkspace = useRef<HTMLElement>(null), suppressNavigation = useRef(0);
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   const [drawingSettings, setDrawingSettings] = useState(defaultToolSettings);
@@ -324,17 +330,376 @@ export function App() {
         ]
       : []),
   ];
-  const title = doc.source.match(/^#\s+(.+)$/m)?.[1] || "Untitled document";
+  const [documents, setDocuments] = useState<WorkspaceDocument[]>([]);
+  const sessionDrafts = useRef(new Map<string, Record<string, unknown>>());
+  const pendingScroll = useRef<Record<string, unknown> | null>(null);
+  const title =
+    documents.find((d) => d.id === doc.id)?.title ?? "Untitled document";
+  controller.current.retain(doc);
+  const currentSession = () => ({
+    prefs: { ...prefs, theme: undefined },
+    exportOptions,
+    drawingSettings,
+    selectedNote,
+    selectedBlock,
+    viewMode,
+    editorScroll: editor.current?.scrollDOM.scrollTop ?? 0,
+    previewScroll: preview.current?.scrollTop ?? 0,
+    previewLeft: preview.current?.scrollLeft ?? 0,
+  });
+  const applySession = (
+    session: Record<string, unknown> = {},
+    reset = true,
+  ) => {
+    pendingScroll.current = session;
+    navigation.cancelGesture();
+    setViewMode(
+      ["split", "preview", "editor"].includes(String(session.viewMode))
+        ? (session.viewMode as typeof viewMode)
+        : innerWidth < 900
+          ? "editor"
+          : "split",
+    );
+    setPrefs((p) => ({ ...restorePreferences(session.prefs), theme: p.theme }));
+    setExportOptions({
+      ...defaultExportOptions,
+      ...((session.exportOptions as Partial<ExportOptions>) ?? {}),
+    });
+    setDrawingSettings({
+      ...defaultToolSettings,
+      ...((session.drawingSettings as Partial<typeof defaultToolSettings>) ??
+        {}),
+    });
+    setSelectedNote(
+      typeof session.selectedNote === "string" ? session.selectedNote : null,
+    );
+    setSelectedBlock(
+      typeof session.selectedBlock === "string" ? session.selectedBlock : "",
+    );
+    if (reset) {
+      setImageDraft(null);
+      setResult(null);
+      setRenderedSnapshot(null);
+      setPreviewSettled(false);
+      if (article.current) article.current.replaceChildren();
+      setRenderError("");
+      setExtraDiagnostics([]);
+      setPreservedNotes(false);
+      notes.setEnabled(false);
+    }
+  };
+  const retainSession = () => {
+    const session = currentSession();
+    sessionDrafts.current.set(doc.id, session);
+    const meta = documents.find((d) => d.id === doc.id);
+    if (meta)
+      void writeDocument({ ...meta, session }).catch((e) =>
+        setNotice(String(e)),
+      );
+    void controller.current.flush(doc).catch((e) => setNotice(String(e)));
+    return session;
+  };
+  const selectDocument = async (id: string) => {
+    if (id === docRef.current.id) return;
+    const outgoing = doc;
+    retainSession();
+    void notes.flush();
+    const epoch = ++switchEpoch.current;
+    try {
+      const draft = controller.current.drafts.get(id),
+        saved = draft ? undefined : await restore(id);
+      if (switchEpoch.current !== epoch) return;
+      const snapshot = draft ?? saved?.snapshot;
+      if (!snapshot)
+        throw new Error(
+          "Document is unavailable. Check Local history or import a backup.",
+        );
+      if (saved) controller.current.restore(saved.snapshot, saved.version);
+      applySession(
+        sessionDrafts.current.get(id) ??
+          documents.find((d) => d.id === id)?.session,
+      );
+      docRef.current = snapshot;
+      setDoc(snapshot);
+      setModal("");
+      void controller.current
+        .flush(outgoing)
+        .then(() => { if (docRef.current.id !== outgoing.id) controller.current.evict(outgoing.id); })
+        .catch((e) => setNotice(String(e)));
+      void activateDocument(id).catch((e) => setNotice(String(e)));
+    } catch (e) {
+      setNotice(String(e));
+    }
+  };
+  const createDocument = async (
+    source: string,
+    name = "Untitled document",
+    assets: DocumentSnapshot["assets"] = {},
+    settings = defaultSettings,
+  ) => {
+    const outgoing = doc;
+    retainSession();
+    void notes.flush();
+    ++switchEpoch.current;
+    const snapshot: DocumentSnapshot = {
+      id: crypto.randomUUID(),
+      revision: 0,
+      source,
+      assets,
+      settings: structuredClone(settings),
+    };
+    const meta: WorkspaceDocument = {
+      id: snapshot.id,
+      title: name,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      session: {},
+    };
+    controller.current.retain(snapshot);
+    setDocuments((ds) => [...ds, meta]);
+    applySession();
+    docRef.current = snapshot;
+    setDoc(snapshot);
+    setModal("");
+    void controller.current.flush(outgoing)
+      .then(() => { if (docRef.current.id !== outgoing.id) controller.current.evict(outgoing.id); })
+      .catch(e => setNotice(String(e)));
+    try {
+      await writeDocument(meta);
+      await controller.current.flush(snapshot);
+      if (docRef.current.id === snapshot.id)
+        await activateDocument(snapshot.id);
+    } catch (e) {
+      setNotice(`Document retained in this session: ${String(e)}`);
+    }
+    return snapshot;
+  };
+  const renameDocument = async () => {
+    const name = prompt("Document name", title)?.trim();
+    if (!name) return;
+    const meta = documents.find((d) => d.id === doc.id);
+    if (!meta) return;
+    const next = {
+      ...meta,
+      title: name,
+      updatedAt: Date.now(),
+      session: currentSession(),
+    };
+    setDocuments((ds) => ds.map((d) => (d.id === next.id ? next : d)));
+    try {
+      await writeDocument(next);
+    } catch (e) {
+      setNotice(String(e));
+    }
+  };
+  const duplicateDocument = async () => {
+    const original = doc,
+      session = { ...currentSession(), selectedNote: null },
+      sets = await readAnnotations(original.id);
+    if (docRef.current !== original) return;
+    if (notes.set && notes.set.documentId === original.id) {
+      const i = sets.findIndex((s) => s.id === notes.set!.id);
+      if (i >= 0) sets[i] = notes.set;
+      else sets.push(notes.set);
+    }
+    const copy = await createDocument(
+      original.source,
+      `${title} copy`,
+      structuredClone(original.assets),
+      original.settings,
+    );
+    sessionDrafts.current.set(copy.id, session);
+    if (docRef.current.id === copy.id) applySession(session, false);
+    const meta = {
+      id: copy.id,
+      title: `${title} copy`,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      session,
+    };
+    await writeDocument(meta);
+    setDocuments((ds) => ds.map((d) => (d.id === copy.id ? meta : d)));
+    for (const set of sets)
+      await saveAnnotations({
+        ...structuredClone(set),
+        id: crypto.randomUUID(),
+        documentId: copy.id,
+        revision:
+          set.snapshot.source === original.source
+            ? copy.revision
+            : set.revision,
+        snapshot: {
+          ...structuredClone(set.snapshot),
+          id: copy.id,
+          revision:
+            set.snapshot.source === original.source
+              ? copy.revision
+              : set.snapshot.revision,
+        },
+        version: crypto.randomUUID(),
+        objects: set.objects.map((a) => ({
+          ...structuredClone(a),
+          id: crypto.randomUUID(),
+        })),
+      });
+    if (docRef.current.id === copy.id) setNotesRestoreKey((k) => k + 1);
+  };
+  const removeDocument = async () => {
+    const id = doc.id;
+    if (!confirm(`Delete "${title}" and its annotations?`)) return;
+    const epoch = ++switchEpoch.current;
+    notes.setEnabled(false);
+    exportAbort.current?.abort();
+    try {
+      await notes.flush();
+      await controller.current.suspend(id);
+      await deleteDocument(id);
+      await notes.discard(id);
+      await controller.current.remove(id);
+      sessionDrafts.current.delete(id);
+      const remaining = documents.filter((d) => d.id !== id);
+      setDocuments(ds => ds.filter(d => d.id !== id));
+      if (docRef.current.id !== id || switchEpoch.current !== epoch) return;
+      // Do not enqueue another save of the deleted outgoing snapshot.
+      const next = remaining[0];
+      if (next) {
+        const draft = controller.current.drafts.get(next.id),
+          saved = draft ? undefined : await restore(next.id);
+        if (docRef.current.id !== id || switchEpoch.current !== epoch) return;
+        const snapshot = draft ?? saved?.snapshot;
+        if (!snapshot) throw new Error("Next document is unavailable.");
+        if (saved) controller.current.restore(saved.snapshot, saved.version);
+        applySession(sessionDrafts.current.get(next.id) ?? next.session);
+        docRef.current = snapshot;
+        setDoc(snapshot);
+        await activateDocument(next.id);
+      } else {
+        const blank = {
+          ...initial,
+          id: crypto.randomUUID(),
+          source: "",
+          assets: {},
+          revision: 0,
+        };
+        applySession();
+        docRef.current = blank;
+        setDoc(blank);
+        const meta = {
+          id: blank.id,
+          title: "Untitled document",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          session: {},
+        };
+        setDocuments([meta]);
+        await writeDocument(meta);
+        await controller.current.flush(blank);
+        if (docRef.current.id === blank.id) await activateDocument(blank.id);
+      }
+    } catch (e) {
+      controller.current.resume(id);
+      setNotice(String(e));
+    }
+  };
+  useEffect(() => {
+    if (!ready) return;
+    const session = {
+      ...currentSession(),
+      ...(pendingScroll.current
+        ? {
+            editorScroll: pendingScroll.current.editorScroll,
+            previewScroll: pendingScroll.current.previewScroll,
+            previewLeft: pendingScroll.current.previewLeft,
+          }
+        : {}),
+    };
+    sessionDrafts.current.set(doc.id, session);
+    const meta = documents.find((d) => d.id === doc.id);
+    if (!meta) return;
+    void writeDocument({ ...meta, session }).catch((e) => setNotice(String(e)));
+  }, [
+    ready,
+    doc.id,
+    prefs,
+    exportOptions,
+    drawingSettings,
+    selectedNote,
+    selectedBlock,
+    viewMode,
+  ]);
+  useEffect(() => {
+    if (
+      !previewSettled ||
+      renderedSnapshot?.id !== doc.id ||
+      !pendingScroll.current
+    )
+      return;
+    const session = pendingScroll.current;
+    pendingScroll.current = null;
+    suppressNavigation.current = performance.now() + 300;
+    const frame = requestAnimationFrame(() => {
+      if (preview.current) {
+        preview.current.scrollTop = Number(session.previewScroll) || 0;
+        preview.current.scrollLeft = Number(session.previewLeft) || 0;
+      }
+      if (editor.current)
+        editor.current.scrollDOM.scrollTop = Number(session.editorScroll) || 0;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [doc.id, previewSettled]);
+  useEffect(() => {
+    if (!ready) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const scrolled = (e: Event) => {
+      if (
+        (e.target !== preview.current &&
+          e.target !== editor.current?.scrollDOM) ||
+        pendingScroll.current
+      )
+        return;
+      const session = currentSession();
+      sessionDrafts.current.set(doc.id, session);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const meta = documents.find((d) => d.id === doc.id);
+        if (meta)
+          void writeDocument({ ...meta, session }).catch((e) =>
+            setNotice(String(e)),
+          );
+      }, 300);
+    };
+    document.addEventListener("scroll", scrolled, true);
+    return () => {
+      document.removeEventListener("scroll", scrolled, true);
+      clearTimeout(timer);
+    };
+  }, [ready, doc.id, prefs, documents]);
   const words = doc.source.trim().split(/\s+/).filter(Boolean).length;
   useEffect(() => {
     void (async () => {
       try {
-        const [saved, p] = await Promise.all([restore(), readPreferences()]);
+        const [p, collection] = await Promise.all([readPreferences(), listDocuments(setDocuments)]);
+        let saved: Saved | undefined;
+        try { saved = await restore(); } catch (e) { setNotice(`The active document needs recovery; its stored records are preserved. ${String(e)}`); }
+        if (!saved) for (const meta of collection) { try { saved = await restore(meta.id); if (saved) break; } catch {} }
+        setDocuments(collection);
         if (saved) {
           setDoc(saved.snapshot);
-          version.current = saved.version;
+          controller.current.restore(saved.snapshot, saved.version);
+          docRef.current = saved.snapshot;
         }
-        if (p) setPrefs(restorePreferences(p));
+        if (saved) {
+          const session = collection.find(d => d.id === saved.snapshot.id)?.session ?? {};
+          setPrefs({ ...restorePreferences(session.prefs), theme: restorePreferences(p).theme });
+          setExportOptions({ ...defaultExportOptions, ...(session.exportOptions as Partial<ExportOptions> ?? {}) });
+          setDrawingSettings({ ...defaultToolSettings, ...(session.drawingSettings as Partial<typeof defaultToolSettings> ?? {}) });
+          sessionDrafts.current.set(saved.snapshot.id, session); pendingScroll.current = session;
+          if (["split","preview","editor"].includes(String(session.viewMode))) setViewMode(session.viewMode as typeof viewMode);
+        } else {
+          if (p) setPrefs(previous => ({ ...previous, theme: restorePreferences(p).theme }));
+          const meta = { id: initial.id, title: 'Welcome to iLoveMd', createdAt: Date.now(), updatedAt: Date.now(), session: {} };
+          setDocuments([...collection, meta]); await writeDocument(meta); await activateDocument(initial.id);
+        }
         setSaveStatus(saved ? "Saved on this device" : "Ready to write");
       } catch (e) {
         setNotice(
@@ -352,28 +717,21 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     if (ready)
-      void writePreferences(prefs).catch(() =>
+      void writePreferences({ theme: prefs.theme }).catch(() =>
         setNotice("Settings could not be saved on this device."),
       );
-  }, [prefs, ready, dark]);
+  }, [prefs.theme, ready, dark]);
   useEffect(() => {
     if (!ready) return;
     setSaveStatus("Unsaved changes");
     const timer = setTimeout(() => {
       const snapshot = doc;
-      saveChain.current = saveChain.current.then(async () => {
-        try {
-          version.current = await save(snapshot, version.current);
-          if (docRef.current.revision === snapshot.revision)
-            setSaveStatus("Saved on this device");
-        } catch (e) {
-          conflicted.current = String(e).includes("Another tab");
-          setSaveStatus("Save needs attention");
-          setNotice(String(e));
-        }
-      });
+      void controller.current.flush(snapshot).then(() => {
+        if (docRef.current === snapshot) setSaveStatus("Saved on this device");
+        if (docRef.current.id !== snapshot.id) controller.current.evict(snapshot.id);
+      }).catch(e => { if (docRef.current.id === snapshot.id) setSaveStatus("Save needs attention"); setNotice(String(e)); });
     }, 500);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); if (docRef.current.id !== doc.id) void controller.current.flush(doc).catch(e => setNotice(String(e))); };
   }, [doc, ready]);
   useEffect(() => {
     const before = (e: BeforeUnloadEvent) => {
@@ -396,9 +754,9 @@ export function App() {
       });
       worker.current = w;
       w.onmessage = (e) => {
+        if (worker.current !== w || e.data.requestKey !== renderRequest.current?.key || renderRequest.current?.snapshot !== docRef.current) return;
         workerBusy.current = false;
         clearTimeout(renderDeadline.current);
-        if (e.data.requestKey !== renderRequest.current?.key || renderRequest.current?.snapshot !== docRef.current) return;
         if (e.data.error) setRenderError(e.data.error);
         else {
           setResult(e.data.result);
@@ -408,6 +766,7 @@ export function App() {
         setRendering(false);
       };
       w.onerror = (e) => {
+        if (worker.current !== w || renderRequest.current?.snapshot !== docRef.current) return;
         workerBusy.current = false;
         clearTimeout(renderDeadline.current);
         setRenderError(`Renderer failed: ${e.message}. Source is preserved.`);
@@ -434,6 +793,7 @@ export function App() {
       renderRequest.current = {key:requestKey,snapshot:doc};
       worker.current?.postMessage({snapshot:doc,requestKey});
       renderDeadline.current = setTimeout(() => {
+        if (renderRequest.current?.key !== requestKey || renderRequest.current.snapshot !== docRef.current) return;
         worker.current?.terminate();
         worker.current = null;
         workerBusy.current = false;
@@ -486,11 +846,11 @@ export function App() {
     narrow.addEventListener('change',collapse);
     return()=>narrow.removeEventListener('change',collapse);
   },[]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     setArtifact(null);
     setExportResult(null);
     exportAbort.current?.abort();
-  }, [doc.revision, exportOptions,selectedBlock,notes.set?.version,exportPreserved]);
+  }, [doc.id, doc.revision, exportOptions,selectedBlock,notes.set?.version,exportPreserved]);
   const updateSource = useCallback((source: string) => {
     performance.mark("folio-edit");
     setDoc((d) =>
@@ -611,8 +971,10 @@ export function App() {
       setMacroText(JSON.stringify(docRef.current.settings.macros, null, 2));
   }, [modal]);
   const handleImage = async (file: File) => {
+    const owner = docRef.current;
     try {
       const asset = await imageAsset(file, file.name);
+      if (docRef.current !== owner) return;
       setImageDraft({ asset, alt: "", caption: "", width: 100 });
       setModal("image");
       track({ event: "content_action", action: "paste_complete", content_type: "image" });
@@ -622,9 +984,9 @@ export function App() {
     }
   };
   const importFile = async (file: File) => {
+    const owner = docRef.current;
     try {
-      await saveChain.current;
-      version.current = await save(docRef.current, version.current);
+      retainSession();
       if (file.size > 70 * 1024 * 1024)
         throw new Error("File exceeds import size limit.");
       if (file.name.endsWith(".zip")) {
@@ -654,22 +1016,17 @@ export function App() {
         const source = strFromU8(entries["document.md"]);
         if (new TextEncoder().encode(source).length > 2 * 1024 * 1024)
           throw new Error("Source exceeds 2 MiB.");
-        setDoc((d) => ({
-          ...d,
-          id: crypto.randomUUID(),
-          source,
-          assets,
-          settings: { ...defaultSettings, ...manifest.settings },
-          revision: d.revision + 1,
-        }));
+        if (docRef.current !== owner) throw new Error("Document changed during import. Select the file again to open it independently.");
+        await createDocument(source, file.name.replace(/\.folio\.zip$|\.zip$/i, ''), assets, { ...defaultSettings, ...manifest.settings });
       } else {
         if (file.size > 2 * 1024 * 1024)
           throw new Error("Markdown exceeds 2 MiB.");
         const source = await file.text();
-        setDoc(d => ({ ...d, id: crypto.randomUUID(), source, assets: {}, revision: d.revision + 1 }));
+        if (docRef.current !== owner) throw new Error("Document changed during import. Select the file again to open it independently.");
+        await createDocument(source, file.name.replace(/\.md$/i, ""));
       }
       setNotice(
-        `Imported ${file.name}. Previous content remains in Local history.`,
+        `Imported ${file.name} as a new document.`,
       );
       track({ event: "content_action", action: "import_complete", content_type: file.name.endsWith(".zip") ? "bundle" : "markdown" });
     } catch (e) {
@@ -698,6 +1055,7 @@ export function App() {
     setNotice("Markdown and assets exported together.");
   };
   const fetchRemote = async () => {
+    const owner = doc;
     setNotice("Fetching remote images without credentials…");
     try {
       const paths = [
@@ -717,6 +1075,7 @@ export function App() {
         if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`);
         assets[url] = await imageAsset(await response.blob(), url);
       }
+      if (docRef.current !== owner) return;
       setDoc((d) => ({ ...d, assets, revision: d.revision + 1 }));
       setNotice(`Stored ${paths.length} remote image(s) locally.`);
     } catch (e) {
@@ -733,23 +1092,24 @@ export function App() {
     setExportDiagnostics([]);
     setArtifact(null);
     exportAbort.current = new AbortController();
+    const operation = exportAbort.current;
     const deadline = setTimeout(
-      () => exportAbort.current?.abort(new Error("Export timed out after 60 seconds. Retry with a shorter document or lower scale.")),
+      () => operation.abort(new Error("Export timed out after 60 seconds. Retry with a shorter document or lower scale.")),
       60000,
     );
     try {
       if (exportOptions.includeAnnotations && notes.stale && !exportPreserved) throw new Error("Choose the preserved annotated revision or disable Include annotations.");
       const snapshot = exportOptions.includeAnnotations && exportPreserved && notes.set ? notes.set.snapshot : doc;
       const { createBrowserArtifact } = await import("./browser-export");
+      if (!exportPreserved && (renderedSnapshot !== doc || !previewSettled)) throw new Error("Wait for the preview to finish rendering before exporting.");
       const generated = await createBrowserArtifact(
         snapshot,
         { ...exportOptions, selection: selectedBlock },
-        exportAbort.current.signal,
-        exportOptions.includeAnnotations && notes.set
-          ? { ...notes.set, snapshot: notes.set.snapshot ?? snapshot }
-          : undefined,
+        operation.signal,
+        notes.set && !notes.stale || exportPreserved ? notes.set ?? undefined : undefined,
+        exportPreserved && notes.set ? { documentId: snapshot.id, revision: snapshot.revision, html: notes.set.previewHtml, layout: notes.set.layout } : article.current ? { documentId: doc.id, revision: doc.revision, html: article.current.innerHTML, layout: measureLayout(article.current) } : undefined,
       );
-      if (docRef.current.revision !== startedRevision || docRef.current.id !== startedDocument)
+      if (operation !== exportAbort.current || operation.signal.aborted || docRef.current.revision !== startedRevision || docRef.current.id !== startedDocument)
         throw new Error(
           "Document changed during export. Generate a fresh export.",
         );
@@ -770,6 +1130,7 @@ export function App() {
       setExportDiagnostics(info.warnings);
       track({ event: "export_completed", export_format: exportOptions.format, annotations_included: !!exportOptions.includeAnnotations });
     } catch (e) {
+      if (operation !== exportAbort.current || docRef.current.id !== startedDocument) return;
       console.error("Browser export failed", e);
       if (e instanceof Error && "diagnostics" in e)
         setExportDiagnostics((e as Error & { diagnostics: Diagnostic[] }).diagnostics);
@@ -783,12 +1144,15 @@ export function App() {
       track({ event: "export_failed", export_format: exportOptions.format, annotations_included: !!exportOptions.includeAnnotations, error_code: errorCode(e) });
     } finally {
       clearTimeout(deadline);
-      setExporting(false);
+      if (operation === exportAbort.current) setExporting(false);
     }
   };
   const openHistory = async () => {
+    const owner = docRef.current.id;
     try {
-      setRecords(await history());
+      const records = await history(owner);
+      if (docRef.current.id !== owner) return;
+      setRecords(records);
       setModal("history");
     } catch (e) {
       setNotice(String(e));
@@ -939,6 +1303,7 @@ export function App() {
           <GitHubStarLink />
         </div>
       </header>
+      {!prefs.outline && <div className="compact-workspace"><label>Document <select aria-label="Active document" value={doc.id} onChange={e => void selectDocument(e.target.value)}>{documents.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}</select></label><button onClick={() => setModal('templates')}>New</button><button onClick={() => void renameDocument()}>Rename</button><button onClick={() => void duplicateDocument().catch(e => setNotice(String(e)))}>Duplicate</button><button onClick={() => void removeDocument()}>Delete</button></div>}
       <div className="app-body">
         {prefs.outline && (
           <aside className="sidebar">
@@ -951,18 +1316,8 @@ export function App() {
                 <Plus size={16} />
               </IconButton>
             </div>
-            <button
-              className="document-item active"
-              onClick={() => navigate(result?.outline[0]?.id || "block-0", 1)}
-            >
-              <FileText size={17} />
-              <span>
-                {title === "A place for your best thinking."
-                  ? "Welcome to iLoveMd"
-                  : title}
-              </span>
-              <span className="tiny-dot" />
-            </button>
+            <WorkspaceList documents={documents} active={doc.id} select={id => void selectDocument(id)} />
+            <div className="workspace-document-actions"><button onClick={() => void renameDocument()}>Rename</button><button onClick={() => void duplicateDocument().catch(e => setNotice(String(e)))}>Duplicate</button><button onClick={() => void removeDocument()}>Delete</button></div>
             <button
               className="sidebar-action"
               onClick={() => fileInput.current?.click()}
@@ -1225,7 +1580,7 @@ export function App() {
                   <Search size={15} />
                 </IconButton>
               </div>
-              <Editor
+              <Editor key={doc.id}
                 source={doc.source}
                 onChange={updateSource}
                 onReady={(v) => (editor.current = v)}
@@ -1304,7 +1659,7 @@ export function App() {
                   </p>
                 )}
                 <div className="preview-stage" style={{ width: (activeNotes?.layout.width ?? surfaceSize.width) * prefs.zoom / 100, height: (activeNotes?.layout.height ?? surfaceSize.height) * prefs.zoom / 100 }}>
-                <div ref={surface} className="preview-surface" style={{ width: baseWidth, transform: `scale(${prefs.zoom / 100})`, transformOrigin: 'top left' }}>
+                <div ref={surface} className="preview-surface document-surface" style={{ width: baseWidth, transform: `scale(${prefs.zoom / 100})`, transformOrigin: 'top left' }}>
                 <article
                   className="document"
                   ref={article}
@@ -1334,7 +1689,7 @@ export function App() {
                     }
                   }}
                 />
-                {activeNotes && renderedSnapshot === doc && previewSettled && <AnnotationLayer selected={selectedNote} select={id => { setSelectedNote(id); const a=activeNotes.objects.find(a=>a.id===id); if(a) setDrawingSettings(s=>({...s,color:a.color,width:a.width,opacity:a.opacity})); }} set={activeNotes} enabled={notes.enabled && !navigation.pan} settings={drawingSettings} change={notes.change} undo={notes.undo} redo={notes.redo}/>}
+                {activeNotes && renderedSnapshot === doc && previewSettled && <AnnotationLayer key={doc.id} selected={selectedNote} select={id => { setSelectedNote(id); const a=activeNotes.objects.find(a=>a.id===id); if(a) setDrawingSettings(s=>({...s,color:a.color,width:a.width,opacity:a.opacity})); }} set={activeNotes} enabled={notes.enabled && !navigation.pan} settings={drawingSettings} change={notes.change} undo={notes.undo} redo={notes.redo}/>}
                 </div></div>
                 <div className="document-end">
                   <span />
@@ -1437,7 +1792,7 @@ export function App() {
         >
           <div className="modal-content">
             <p className="help">
-              Replaces the current document. A recovery copy is saved first.
+              Creates an independent document in this workspace.
             </p>
             <div className="template-list">
               {Object.entries(templates).map(([name, source]) => (
@@ -1445,9 +1800,7 @@ export function App() {
                   key={name}
                   onClick={async () => {
                     try {
-                      await saveChain.current;
-                      version.current = await save(doc, version.current);
-                      setDoc(d => ({ ...d, id: crypto.randomUUID(), source, assets: {}, revision: d.revision + 1 }));
+                      await createDocument(source, name);
                       setModal("");
                     } catch (e) {
                       setNotice(String(e));
@@ -1483,7 +1836,8 @@ export function App() {
                 <button
                   key={r.key}
                   onClick={() => {
-                    setDoc(structuredClone(r.snapshot));
+                    if (r.snapshot.id !== docRef.current.id) return;
+                    setDoc(d => ({ ...structuredClone(r.snapshot), revision: d.revision + 1 }));
                     setNotesRestoreKey(k => k+1);
                     setModal("");
                     setNotice(
@@ -2020,7 +2374,7 @@ export function App() {
                 <input
                   type="number"
                   min="0.25"
-                  max="2"
+                  max="4"
                   step="0.25"
                   value={exportOptions.scale}
                   disabled={!!exportOptions.includeAnnotations && exportOptions.format === "pdf"}
@@ -2058,8 +2412,8 @@ export function App() {
                       type="number"
                       min="320"
                       max="4096"
-                      value={exportOptions.width}
-                      disabled={!!exportOptions.includeAnnotations}
+                      value={exportOptions.includeAnnotations ? notes.set?.layout.width ?? surfaceSize.width : exportOptions.pngMode === "pages" ? surfaceSize.width : exportOptions.width}
+                      disabled={!!exportOptions.includeAnnotations || exportOptions.pngMode === "pages"}
                       onChange={(e) =>
                         setExportOptions((o) => ({
                           ...o,
@@ -2082,7 +2436,7 @@ export function App() {
                     >
                       <option value="theme">Document theme</option>
                       <option value="transparent">
-                        Transparent (document/block)
+                        Transparent
                       </option>
                     </select>
                   </label>
@@ -2101,7 +2455,7 @@ export function App() {
                 />
                 Export with visible warnings if content needs attention
               </label>
-              <label className="checkbox-label"><input type="checkbox" checked={!!exportOptions.includeAnnotations} disabled={!notes.set} onChange={e => setExportOptions(o => ({...o,includeAnnotations:e.target.checked}))}/>Include annotations</label>
+              <label className="checkbox-label"><input type="checkbox" checked={!!exportOptions.includeAnnotations} disabled={!notes.set} onChange={e => { if (!e.target.checked) setExportPreserved(false); setExportOptions(o => ({...o,includeAnnotations:e.target.checked})); }}/>Include annotations</label>
               {exportOptions.includeAnnotations && <p className="help">Uses the preserved page width and typography. PDF fits this layout to the paper; page boundaries can split content. Video embeds remain static.</p>}
               {exportOptions.includeAnnotations && notes.stale && <label className="checkbox-label"><input type="checkbox" checked={exportPreserved} onChange={e=>setExportPreserved(e.target.checked)}/>Export the preserved annotated revision instead of current Markdown</label>}
               {exportError && (
@@ -2117,7 +2471,7 @@ export function App() {
               <button
                 className="primary-button full"
                 onClick={generateExport}
-                disabled={exporting}
+                disabled={exporting || (!exportPreserved && (!previewSettled || renderedSnapshot !== doc))}
               >
                 {exporting ? (
                   <LoaderCircle size={16} className="spin" />

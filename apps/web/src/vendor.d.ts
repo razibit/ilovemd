@@ -14,8 +14,3 @@ declare module "pdfmake/build/vfs_fonts" {
   const fonts: Record<string, string>;
   export default fonts;
 }
-
-declare module "html-to-pdfmake" {
-  const convert: (html: string, options: Record<string, unknown>) => unknown;
-  export default convert;
-}

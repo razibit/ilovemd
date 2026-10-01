@@ -180,7 +180,6 @@ test("compact responsive workspace and annotation editing", async ({
 
 test("visual exports include exact vectors, selection crops and final-page notes", async ({
   page,
-  request,
 }) => {
   test.setTimeout(120000);
   await page.goto("/");
@@ -252,28 +251,22 @@ test("visual exports include exact vectors, selection crops and final-page notes
     format: "png" | "html" | "pdf",
     extra: Record<string, unknown> = {},
   ) => {
-    const response = await request.post("/api/exports", {
-      data: {
-        snapshot: set.snapshot,
-        annotations: set,
-        options: {
-          ...defaultExportOptions,
-          format,
-          includeAnnotations: true,
-          ...extra,
-        },
-      },
-    });
-    const info = await response.json();
-    expect(response.ok(), JSON.stringify(info)).toBeTruthy();
-    const download = await request.get(info.artifacts[0].url, {
-      headers: { "X-Export-Token": info.token },
-    });
-    expect(download.ok()).toBeTruthy();
-    const bytes = await download.body();
-    await request.delete(`/api/exports/${info.id}`, {
-      headers: { "X-Export-Token": info.token },
-    });
+    await page.evaluate(async value => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => { const r=indexedDB.open('folio');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error); });
+      await new Promise<void>((resolve,reject)=>{const tx=db.transaction('annotations','readwrite');tx.objectStore('annotations').put(value);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});db.close();
+    }, set);
+    await page.reload();
+    await expect(page.locator('.annotation-layer')).toBeVisible();
+    if (extra.selection) await page.locator(`article #${extra.selection}`).click();
+    await page.getByRole('button',{name:'Export',exact:true}).click();
+    await page.getByRole('button',{name:format==='pdf'?'PDF Print & share':format==='png'?'PNG Capture & present':'HTML Publish & archive'}).click();
+    await page.getByRole('checkbox',{name:'Include annotations',exact:true}).setChecked(extra.includeAnnotations !== false);
+    if (format==='png' && extra.pngMode) await page.getByRole('combobox',{name:'Capture',exact:true}).selectOption(String(extra.pngMode));
+    await page.getByRole('button',{name:/Generate export preview|Retry export/}).click();
+    const button=page.getByRole('button',{name:extra.pngMode==='pages'?'Download document-pages.zip':`Download document.${format}`,exact:true});
+    await expect(button).toBeVisible({timeout:60000});
+    const downloading=page.waitForEvent('download');await button.click();const download=await downloading;const path=await download.path();
+    const bytes=await (await import('node:fs/promises')).readFile(path!);
     return bytes;
   };
   const redBounds = async (bytes: Buffer) => {
@@ -317,7 +310,7 @@ test("visual exports include exact vectors, selection crops and final-page notes
   await writeFile("output/playwright/annotated-selection.png", selection);
   const html = (await artifact("html")).toString();
   expect(html).toContain('stroke="#ff0000"');
-  expect(html).toContain(`width:${set.layout.width}px!important`);
+  expect(html).toContain(`width: ${set.layout.width}px`);
   const pages = unzipSync(await artifact("png", { pngMode: "pages" }));
   const names = Object.keys(pages).sort();
   expect(names.length).toBeGreaterThan(1);
@@ -328,9 +321,9 @@ test("visual exports include exact vectors, selection crops and final-page notes
     "output/playwright/annotated-last-page.png",
     pages[names.at(-1)!],
   );
-  // The export payload did not mutate the saved editable set.
+  // The production exporter leaves saved editable notes intact.
   await page.reload();
-  await expect(page.locator(".annotation-layer > g")).toHaveCount(0);
+  await expect(page.locator(".annotation-layer > g[data-note-id]")).toHaveCount(2);
 });
 
 test("toolbar follows deliberate scrolling and retains focused controls", async ({
@@ -432,7 +425,8 @@ test("document isolation and competing annotation saves", async ({
 test("version two browser storage upgrades without losing the document", async ({
   page,
 }) => {
-  await page.goto("/api/health");
+  await page.route("**/migration-seed", route => route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Migration seed</title>" }));
+  await page.goto("/migration-seed");
   await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const r = indexedDB.open("folio", 2);
@@ -580,6 +574,7 @@ test.describe("high density annotation geometry", () => {
     await page.screenshot({
       path: "output/playwright/annotations-high-density.png",
     });
+    if (!(await page.getByRole("button", { name: "Clear notes" }).isVisible())) await toggleAnnotations(page);
     page.once("dialog", (dialog) => dialog.dismiss());
     await page.getByRole("button", { name: "Clear notes" }).click();
     await expect(layer.locator(":scope > g[data-note-id]")).toHaveCount(8);

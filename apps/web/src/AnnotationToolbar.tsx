@@ -55,7 +55,8 @@ export function AnnotationToolbar({
     const el = palette.current;
     if (!el) return;
     const previewBounds = document.querySelector(".preview-scroll")?.getBoundingClientRect();
-    const minY = Math.max(8, previewBounds?.top ?? 8);
+    const controls = document.querySelector('.workspace-toolbar')?.getBoundingClientRect();
+    const minY = Math.max(8, previewBounds?.height ? previewBounds.top : 8, controls?.bottom ?? 8);
     const maxY = Math.max(minY, (previewBounds?.bottom ?? innerHeight) - el.offsetHeight - 8);
     const next = {
       x: Math.max(8, Math.min(x, innerWidth - el.offsetWidth - 8)),
@@ -75,6 +76,10 @@ export function AnnotationToolbar({
     reposition();
     const observer = new ResizeObserver(reposition);
     observer.observe(palette.current!);
+    const preview = document.querySelector('.preview-scroll');
+    if (preview) observer.observe(preview);
+    const controls = document.querySelector('.workspace-toolbar');
+    if (controls) observer.observe(controls);
     window.addEventListener("resize", reposition);
     return () => { observer.disconnect(); window.removeEventListener("resize", reposition); };
   }, [visible]);

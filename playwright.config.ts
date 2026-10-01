@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+const frontendUrl = process.env.FOLIO_FRONTEND_URL ?? "http://127.0.0.1:4174";
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 60000,
@@ -7,11 +8,12 @@ export default defineConfig({
   fullyParallel: false,
   reporter: [
     ["list"],
-    ["html", { outputFolder: "output/playwright/report", open: "never" }],
+    // Keep one copy of retained traces on storage-constrained developer devices.
+    ["json", { outputFile: "output/playwright/test-results.json" }],
   ],
   outputDir: "output/playwright/results",
   use: {
-    baseURL: "http://127.0.0.1:4174",
+    baseURL: frontendUrl,
     viewport: { width: 1440, height: 1000 },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
@@ -30,7 +32,9 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         channel: "chrome",
         headless: false,
-        launchOptions: { args: ['--auto-open-devtools-for-tabs'] },
+        // Keep the emulated page's native input surface unobstructed. Inspect
+        // DevTools separately: docked DevTools changes Chrome's compositor
+        // hit testing independently of Playwright's emulated viewport.
         viewport: { width: 1440, height: 1000 },
         trace: "on",
       },
@@ -51,8 +55,12 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm start",
-    url: "http://127.0.0.1:4174/api/health",
-    reuseExistingServer: true,
+    command: `npm exec -w @folio/web vite build -- --outDir ../../output/static-frontend && node tests/static-server.mjs --port ${new URL(frontendUrl).port}`,
+    env: {
+      VITE_ANALYTICS_MODE: "disabled",
+      VITE_PORTFOLIO_URL: "https://portfolio.example.test/",
+    },
+    url: frontendUrl,
+    reuseExistingServer: !!process.env.FOLIO_FRONTEND_URL,
   },
 });
