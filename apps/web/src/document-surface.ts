@@ -50,16 +50,15 @@ export function verifyGeometry(article: HTMLElement, set: AnnotationSet) {
         `Annotated block ${block.id} is missing. Review the preserved revision.`,
       );
     const r = el.getBoundingClientRect();
-    if (
-      Math.max(
-        Math.abs(r.x - origin.x - block.x),
-        Math.abs(r.y - origin.y - block.y),
-        Math.abs(r.width - block.width),
-        Math.abs(r.height - block.height),
-      ) > 1
-    )
+    const differences = [
+      r.x - origin.x - block.x,
+      r.y - origin.y - block.y,
+      r.width - block.width,
+      r.height - block.height,
+    ];
+    if (Math.max(...differences.map(Math.abs)) > 1)
       throw new Error(
-        `Annotated block ${block.id} changed layout. Wait for resources or review and adopt the preserved notes.`,
+        `Annotated block ${block.id} changed layout (x/y/width/height delta: ${differences.map((value) => value.toFixed(2)).join("/")} CSS px). Wait for resources or review and adopt the preserved notes.`,
       );
   }
 }

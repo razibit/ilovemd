@@ -162,9 +162,12 @@ function makeSurface(
 ) {
   const host = document.createElement("div"),
     article = document.createElement("article");
-  let layout =
-    context?.layout ??
-    (options.includeAnnotations ? annotations?.layout : undefined);
+  // Notes and their block map belong to the captured layout, even when the
+  // live preview has subsequently been remeasured. Never combine that map with
+  // newer preview dimensions or typography.
+  let layout = options.includeAnnotations
+    ? (annotations?.layout ?? context?.layout)
+    : context?.layout;
   // Clean document/block PNGs still honor the explicit width control. Annotated
   // captures and page images use their frozen shared PDF/document geometry.
   if (
@@ -331,8 +334,8 @@ export async function createBrowserArtifact(
   const rendered = await renderDocument(snapshot);
   const warnings = [...rendered.diagnostics];
   const { host, article } = makeSurface(
-    context?.html ??
-      (options.includeAnnotations ? annotations?.previewHtml : undefined) ??
+    (options.includeAnnotations ? annotations?.previewHtml : undefined) ??
+      context?.html ??
       rendered.html,
     options,
     annotations,

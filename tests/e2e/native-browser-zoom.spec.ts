@@ -26,12 +26,14 @@ test("native Chrome browser zoom preserves pointer and image geometry", async ({
     for (const zoom of [100, 75, 125, 175]) {
       await settings.locator("#zoomLevel").selectOption({ label: `${zoom}%` });
       const page = await context.newPage();
+      await page.bringToFront();
       await page.goto(info.project.use.baseURL as string);
       await expect(page.locator("article h1")).toBeVisible();
       if (zoom === 100) {
         await replaceEditor(
           page.getByRole("textbox", { name: "Markdown source" }),
           "# Native browser zoom\n\n" +
+            "> **Experience**  \n> DenZo — Founding Engineer & CEO  \n>\n> **Projects**  \n> DenZo\n\n" +
             "Browser zoom preserves this document.\n\n".repeat(8),
         );
         await expect(page.locator("article h1")).toHaveText(
@@ -46,6 +48,7 @@ test("native Chrome browser zoom preserves pointer and image geometry", async ({
         .click();
       const layer = page.locator(".annotation-layer");
       await expect(layer).toBeVisible();
+      await expect(layer).toHaveClass(/drawing-enabled/);
       await page.locator(".preview-scroll").evaluate((e) => {
         e.scrollTop = e.scrollLeft = 0;
       });
@@ -55,6 +58,7 @@ test("native Chrome browser zoom preserves pointer and image geometry", async ({
           .map((p) => p.matrixTransform(matrix))
           .map((p) => ({ x: p.x, y: p.y }));
       });
+      await page.bringToFront();
       await page.mouse.move(points[0].x, points[0].y);
       await page.mouse.down();
       await page.mouse.move(points[1].x, points[1].y);
